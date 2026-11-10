@@ -1,0 +1,1452 @@
+{
+  "source_file": "aveva_like_signals.xml",
+  "plant_information": {
+    "SchemaVersion": "3.3.3",
+    "OriginatingSystem": "AVEVA PID",
+    "Date": "2026-11-10",
+    "Units": "mm"
+  },
+  "drawing": {
+    "name": "WW-01",
+    "type": "PID",
+    "title": null,
+    "extent": {
+      "min": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "max": {
+        "x": 841,
+        "y": 594,
+        "z": 0
+      },
+      "width": 841,
+      "height": 594,
+      "center": {
+        "x": 420.5,
+        "y": 297.0
+      }
+    },
+    "attributes": {}
+  },
+  "summary": {
+    "symbols": 14,
+    "symbols_by_type": {
+      "Equipment": 2,
+      "Nozzle": 2,
+      "PipingComponent": 2,
+      "ProcessInstrument": 2,
+      "PipeFlowArrow": 1,
+      "InsulationSymbol": 1,
+      "PropertyBreak": 1,
+      "PipeConnectorSymbol": 1,
+      "SignalConnectorSymbol": 1,
+      "InstrumentComponent": 1
+    },
+    "pipes": 3,
+    "connections": 2,
+    "virtual_connections": 0,
+    "lines": 4,
+    "texts": 6
+  },
+  "symbols": [
+    {
+      "id": "1A01",
+      "type": "Equipment",
+      "component_class": "Tank",
+      "component_name": "TANK_V",
+      "tag_name": "T-101",
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 80,
+          "y": 300,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 50,
+          "y": 250,
+          "z": 0
+        },
+        "max": {
+          "x": 110,
+          "y": 350,
+          "z": 0
+        },
+        "width": 60,
+        "height": 100,
+        "center": {
+          "x": 80.0,
+          "y": 300.0
+        }
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "presentation": {
+        "Layer": "AS_EQU",
+        "LineType": "1",
+        "LineWeight": "0.5",
+        "Color": "White"
+      },
+      "persistent_id": {
+        "identifier": "1A01",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "Capacity": {
+          "value": 50,
+          "units": "m3"
+        },
+        "Fluid": "IWW2"
+      },
+      "connection_points": null,
+      "nominal_diameter": {
+        "value": 150,
+        "units": "mm"
+      },
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "1A02",
+      "type": "Nozzle",
+      "component_class": "Nozzle",
+      "component_name": null,
+      "tag_name": "N1",
+      "parent_id": "1A01",
+      "position": {
+        "location": {
+          "x": 110,
+          "y": 300,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 110.0,
+          "y": 300.0,
+          "z": null
+        },
+        "max": {
+          "x": 112.0,
+          "y": 300.0,
+          "z": null
+        },
+        "width": 2.0,
+        "height": 0.0,
+        "center": {
+          "x": 111.0,
+          "y": 300.0
+        },
+        "derived": true
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "1A02",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": {
+        "num_points": 2,
+        "flow_in": 0,
+        "flow_out": 1,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 110,
+              "y": 300,
+              "z": 0
+            },
+            "flow": "in",
+            "nominal_diameter": null
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 112,
+              "y": 300,
+              "z": 0
+            },
+            "flow": "out",
+            "nominal_diameter": {
+              "value": 150,
+              "units": "mm"
+            }
+          }
+        ]
+      },
+      "nominal_diameter": {
+        "value": 150,
+        "units": "mm"
+      },
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "1B01",
+      "type": "Equipment",
+      "component_class": "UnderwaterPump",
+      "component_name": "PUMP_SUB",
+      "tag_name": "P-201",
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 420,
+          "y": 250,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 400,
+          "y": 230,
+          "z": 0
+        },
+        "max": {
+          "x": 440,
+          "y": 270,
+          "z": 0
+        },
+        "width": 40,
+        "height": 40,
+        "center": {
+          "x": 420.0,
+          "y": 250.0
+        }
+      },
+      "scale": null,
+      "presentation": {
+        "Layer": "AS_EQU",
+        "LineType": "1",
+        "LineWeight": "0.5",
+        "Color": "White"
+      },
+      "persistent_id": {
+        "identifier": "1B01",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "Flow": {
+          "value": 30,
+          "units": "m3/h"
+        }
+      },
+      "connection_points": null,
+      "nominal_diameter": {
+        "value": 100,
+        "units": "mm"
+      },
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "1B02",
+      "type": "Nozzle",
+      "component_class": "Nozzle",
+      "component_name": null,
+      "tag_name": "N1",
+      "parent_id": "1B01",
+      "position": {
+        "location": {
+          "x": 400,
+          "y": 250,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": -1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 180.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 398.0,
+          "y": 250.0,
+          "z": null
+        },
+        "max": {
+          "x": 400.0,
+          "y": 250.0,
+          "z": null
+        },
+        "width": 2.0,
+        "height": 0.0,
+        "center": {
+          "x": 399.0,
+          "y": 250.0
+        },
+        "derived": true
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "1B02",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": {
+        "num_points": 2,
+        "flow_in": 1,
+        "flow_out": 0,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 400,
+              "y": 250,
+              "z": 0
+            },
+            "flow": "out",
+            "nominal_diameter": null
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 398,
+              "y": 250,
+              "z": 0
+            },
+            "flow": "in",
+            "nominal_diameter": {
+              "value": 100,
+              "units": "mm"
+            }
+          }
+        ]
+      },
+      "nominal_diameter": {
+        "value": 100,
+        "units": "mm"
+      },
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "3A00",
+      "type": "PipingComponent",
+      "component_class": "BallValve",
+      "component_name": "VALVE_BALL",
+      "tag_name": "V-101",
+      "parent_id": "2A01",
+      "position": {
+        "location": {
+          "x": 185,
+          "y": 300,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 180,
+          "y": 295,
+          "z": 0
+        },
+        "max": {
+          "x": 190,
+          "y": 305,
+          "z": 0
+        },
+        "width": 10,
+        "height": 10,
+        "center": {
+          "x": 185.0,
+          "y": 300.0
+        }
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "presentation": {
+        "Layer": "AS_PIPE",
+        "LineType": "1",
+        "LineWeight": "0.35",
+        "Color": "White"
+      },
+      "persistent_id": {
+        "identifier": "3A00",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "Body": "BALL VALVE",
+        "Closure": "NO"
+      },
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "3A01",
+      "type": "PipingComponent",
+      "component_class": "Tee",
+      "component_name": "TEE_EQ",
+      "tag_name": null,
+      "parent_id": "2A01",
+      "position": {
+        "location": {
+          "x": 255,
+          "y": 300,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 250,
+          "y": 295,
+          "z": 0
+        },
+        "max": {
+          "x": 260,
+          "y": 305,
+          "z": 0
+        },
+        "width": 10,
+        "height": 10,
+        "center": {
+          "x": 255.0,
+          "y": 300.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "3A01",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "PdmsType": "TEE"
+      },
+      "connection_points": {
+        "num_points": 4,
+        "flow_in": null,
+        "flow_out": null,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 255,
+              "y": 300,
+              "z": 0
+            },
+            "flow": null,
+            "nominal_diameter": null
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 250,
+              "y": 300,
+              "z": 0
+            },
+            "flow": null,
+            "nominal_diameter": null
+          },
+          {
+            "index": 2,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 260,
+              "y": 300,
+              "z": 0
+            },
+            "flow": null,
+            "nominal_diameter": null
+          },
+          {
+            "index": 3,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 255,
+              "y": 305,
+              "z": 0
+            },
+            "flow": null,
+            "nominal_diameter": null
+          }
+        ]
+      },
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "2AF1",
+      "type": "PipeFlowArrow",
+      "component_class": "PipeFlowArrow",
+      "component_name": null,
+      "tag_name": null,
+      "parent_id": "2A02",
+      "position": {
+        "location": {
+          "x": 290,
+          "y": 300,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 287,
+          "y": 297,
+          "z": 0
+        },
+        "max": {
+          "x": 293,
+          "y": 303,
+          "z": 0
+        },
+        "width": 6,
+        "height": 6,
+        "center": {
+          "x": 290.0,
+          "y": 300.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "2AF1",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": true,
+      "virtual": false
+    },
+    {
+      "id": "2AF2",
+      "type": "InsulationSymbol",
+      "component_class": "ArrowMiddle",
+      "component_name": null,
+      "tag_name": null,
+      "parent_id": "2A02",
+      "position": {
+        "location": {
+          "x": 360,
+          "y": 250,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 355,
+          "y": 246,
+          "z": 0
+        },
+        "max": {
+          "x": 365,
+          "y": 254,
+          "z": 0
+        },
+        "width": 10,
+        "height": 8,
+        "center": {
+          "x": 360.0,
+          "y": 250.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "2AF2",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "insulation_condition": "HOT"
+      },
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": true,
+      "virtual": false
+    },
+    {
+      "id": "2AF3",
+      "type": "PropertyBreak",
+      "component_class": "SpecificationBreak",
+      "component_name": null,
+      "tag_name": null,
+      "parent_id": "2A03",
+      "position": {
+        "location": {
+          "x": 400,
+          "y": 400,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 395,
+          "y": 395,
+          "z": 0
+        },
+        "max": {
+          "x": 405,
+          "y": 405,
+          "z": 0
+        },
+        "width": 10,
+        "height": 10,
+        "center": {
+          "x": 400.0,
+          "y": 400.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "2AF3",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "4A01",
+      "type": "PipeConnectorSymbol",
+      "component_class": "PipeConnectionFlagOutbound",
+      "component_name": "OPC_OUT",
+      "tag_name": null,
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 610,
+          "y": 400,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 600,
+          "y": 395,
+          "z": 0
+        },
+        "max": {
+          "x": 625,
+          "y": 405,
+          "z": 0
+        },
+        "width": 25,
+        "height": 10,
+        "center": {
+          "x": 612.5,
+          "y": 400.0
+        }
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "4A01",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "pipe_note1": "TO EQ TANK"
+      },
+      "connection_points": {
+        "num_points": 2,
+        "flow_in": null,
+        "flow_out": null,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 610,
+              "y": 400,
+              "z": 0
+            },
+            "flow": null,
+            "nominal_diameter": null
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 600,
+              "y": 400,
+              "z": 0
+            },
+            "flow": null,
+            "nominal_diameter": {
+              "value": 80,
+              "units": "mm"
+            }
+          }
+        ]
+      },
+      "nominal_diameter": {
+        "value": 80,
+        "units": "mm"
+      },
+      "cross_page": {
+        "drawing_name": "WW-02",
+        "link_label": "IWW2"
+      },
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "5A01",
+      "type": "ProcessInstrument",
+      "component_class": "LevelTransmitter",
+      "component_name": "INST_BUBBLE",
+      "tag_name": "LT-101",
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 80,
+          "y": 420,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 72,
+          "y": 412,
+          "z": 0
+        },
+        "max": {
+          "x": 88,
+          "y": 428,
+          "z": 0
+        },
+        "width": 16,
+        "height": 16,
+        "center": {
+          "x": 80.0,
+          "y": 420.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "5A01",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "5B01",
+      "type": "ProcessInstrument",
+      "component_class": "FlowTransmitter",
+      "component_name": "INST_BUBBLE",
+      "tag_name": "FT-102",
+      "parent_id": null,
+      "position": null,
+      "extent": {
+        "min": {
+          "x": 177,
+          "y": 192,
+          "z": null
+        },
+        "max": {
+          "x": 193,
+          "y": 208,
+          "z": null
+        },
+        "width": 16,
+        "height": 16,
+        "center": {
+          "x": 185.0,
+          "y": 200.0
+        },
+        "derived": true
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "5B01",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "5C01",
+      "type": "SignalConnectorSymbol",
+      "component_class": "SignalConnectionFlagOutbound",
+      "component_name": "SIG_OUT",
+      "tag_name": null,
+      "parent_id": null,
+      "position": null,
+      "extent": {
+        "min": {
+          "x": 300.0,
+          "y": 195.0,
+          "z": null
+        },
+        "max": {
+          "x": 325.0,
+          "y": 205.0,
+          "z": null
+        },
+        "width": 25.0,
+        "height": 10.0,
+        "center": {
+          "x": 312.5,
+          "y": 200.0
+        },
+        "derived": true
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "5C01",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": {
+        "drawing_name": "WW-03",
+        "link_label": "FIC-102"
+      },
+      "annotation": false,
+      "virtual": false
+    },
+    {
+      "id": "5B02",
+      "type": "InstrumentComponent",
+      "component_class": "ControlValveActuator",
+      "component_name": null,
+      "tag_name": "FV-102",
+      "parent_id": null,
+      "position": null,
+      "extent": null,
+      "scale": null,
+      "presentation": null,
+      "persistent_id": {
+        "identifier": "5B02",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "connection_points": null,
+      "nominal_diameter": null,
+      "cross_page": null,
+      "annotation": false,
+      "virtual": false
+    }
+  ],
+  "pipes": [
+    {
+      "id": "2A01",
+      "system_id": "2A00",
+      "component_class": "PipeLine",
+      "tag_name": "∅150",
+      "persistent_id": {
+        "identifier": "2A01",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "Fluid": "IWW2",
+        "Size": {
+          "value": 150,
+          "units": "mm"
+        },
+        "connected_handle_from": "1A02",
+        "connected_handle_to": "3A01",
+        "connected_pdms_type_from": "NOZZ",
+        "connected_pdms_type_to": "TEE"
+      },
+      "segment_attributes": {
+        "Size": {
+          "value": 150,
+          "units": "mm"
+        },
+        "Fluid": "IWW2",
+        "connected_handle_from": "1A02",
+        "connected_handle_to": "3A01",
+        "connected_pdms_type_from": "NOZZ",
+        "connected_pdms_type_to": "TEE"
+      },
+      "system_attributes": {
+        "Fluid": "IWW2"
+      },
+      "centerlines": [
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 112,
+              "y": 300,
+              "z": 0
+            },
+            {
+              "x": 180,
+              "y": 300,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 190,
+              "y": 300,
+              "z": 0
+            },
+            {
+              "x": 250,
+              "y": 300,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "components": [
+        "3A00",
+        "3A01"
+      ],
+      "nominal_diameter": {
+        "value": 150,
+        "units": "mm"
+      },
+      "extent": {
+        "min": {
+          "x": 112,
+          "y": 295,
+          "z": 0
+        },
+        "max": {
+          "x": 260,
+          "y": 305,
+          "z": 0
+        },
+        "width": 148,
+        "height": 10,
+        "center": {
+          "x": 186.0,
+          "y": 300.0
+        }
+      },
+      "virtual": false
+    },
+    {
+      "id": "2A02",
+      "system_id": "2A00",
+      "component_class": "PipeLine",
+      "tag_name": "∅100",
+      "persistent_id": {
+        "identifier": "2A02",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "Fluid": "IWW2",
+        "Size": {
+          "value": 100,
+          "units": "mm"
+        },
+        "connected_handle_from": "3A01",
+        "connected_handle_to": "1B02",
+        "connected_pdms_type_from": "TEE",
+        "connected_pdms_type_to": "NOZZ"
+      },
+      "segment_attributes": {
+        "Size": {
+          "value": 100,
+          "units": "mm"
+        },
+        "connected_handle_from": "3A01",
+        "connected_handle_to": "1B02",
+        "connected_pdms_type_from": "TEE",
+        "connected_pdms_type_to": "NOZZ"
+      },
+      "system_attributes": {
+        "Fluid": "IWW2"
+      },
+      "centerlines": [
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 260,
+              "y": 300,
+              "z": 0
+            },
+            {
+              "x": 320,
+              "y": 300,
+              "z": 0
+            },
+            {
+              "x": 320,
+              "y": 250,
+              "z": 0
+            },
+            {
+              "x": 398,
+              "y": 250,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "components": [
+        "2AF1",
+        "2AF2"
+      ],
+      "nominal_diameter": null,
+      "extent": null,
+      "virtual": false
+    },
+    {
+      "id": "2A03",
+      "system_id": "2A00",
+      "component_class": "PipeLine",
+      "tag_name": "∅80",
+      "persistent_id": {
+        "identifier": "2A03",
+        "context": "WW-01"
+      },
+      "attributes": {
+        "Fluid": "IWW2",
+        "Size": {
+          "value": 80,
+          "units": "mm"
+        },
+        "BranchId": "2"
+      },
+      "segment_attributes": {
+        "Size": {
+          "value": 80,
+          "units": "mm"
+        },
+        "BranchId": "2"
+      },
+      "system_attributes": {
+        "Fluid": "IWW2"
+      },
+      "centerlines": [
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 255,
+              "y": 305,
+              "z": 0
+            },
+            {
+              "x": 255,
+              "y": 400,
+              "z": 0
+            },
+            {
+              "x": 600,
+              "y": 400,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "components": [
+        "2AF3"
+      ],
+      "nominal_diameter": null,
+      "extent": null,
+      "virtual": false
+    }
+  ],
+  "connections": [
+    {
+      "segment_id": "2A01",
+      "from_id": "1A02",
+      "from_node": 1,
+      "to_id": "3A01",
+      "to_node": 1,
+      "segment_line": "∅150",
+      "from_type": "Nozzle",
+      "from_tag": "N1",
+      "to_type": "Tee",
+      "to_tag": null,
+      "from_node_flow": "out",
+      "to_node_flow": null,
+      "flow_direction": "from->to",
+      "virtual": false,
+      "unresolved": []
+    },
+    {
+      "segment_id": "2A03",
+      "from_id": "3A01",
+      "from_node": 3,
+      "to_id": "4A01",
+      "to_node": 1,
+      "segment_line": "∅80",
+      "from_type": "Tee",
+      "from_tag": null,
+      "to_type": "PipeConnectionFlagOutbound",
+      "to_tag": null,
+      "from_node_flow": null,
+      "to_node_flow": null,
+      "flow_direction": null,
+      "virtual": false,
+      "unresolved": []
+    }
+  ],
+  "lines": [
+    {
+      "id": "5A10",
+      "type": "SignalLine",
+      "kind": "SIGNAL",
+      "component_class": "Electric",
+      "tag_name": null,
+      "persistent_id": {
+        "identifier": "5A10",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "points": [
+        {
+          "x": 80,
+          "y": 412,
+          "z": 0
+        },
+        {
+          "x": 80,
+          "y": 350,
+          "z": 0
+        }
+      ],
+      "from_id": "5A01",
+      "from_node": null,
+      "to_id": "1A01",
+      "to_node": null
+    },
+    {
+      "id": "5B10",
+      "type": "SignalLine",
+      "kind": "SIGNAL",
+      "component_class": "Electric",
+      "tag_name": null,
+      "persistent_id": {
+        "identifier": "5B10",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "points": [
+        {
+          "x": 193,
+          "y": 200,
+          "z": 0
+        },
+        {
+          "x": 300,
+          "y": 200,
+          "z": 0
+        }
+      ],
+      "from_id": null,
+      "from_node": null,
+      "to_id": null,
+      "to_node": null
+    },
+    {
+      "id": "5B11",
+      "type": "SignalLine",
+      "kind": "SIGNAL",
+      "component_class": "Pneumatic",
+      "tag_name": null,
+      "persistent_id": {
+        "identifier": "5B11",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "points": [],
+      "from_id": "5B01",
+      "from_node": null,
+      "to_id": "5B02",
+      "to_node": null
+    },
+    {
+      "id": "5B12",
+      "type": "SignalLine",
+      "kind": "SIGNAL",
+      "component_class": "Electric",
+      "tag_name": null,
+      "persistent_id": {
+        "identifier": "5B12",
+        "context": "WW-01"
+      },
+      "attributes": {},
+      "points": [],
+      "from_id": "5B02",
+      "from_node": null,
+      "to_id": "3A00",
+      "to_node": null
+    }
+  ],
+  "texts": [
+    {
+      "string": "WASTEWATER TREATMENT - SHEET 1",
+      "owner_id": null,
+      "symbol_id": null,
+      "location": {
+        "x": 620,
+        "y": 20,
+        "z": 0
+      },
+      "rotation_deg": 0,
+      "height": 5,
+      "width": 120,
+      "justification": "LeftBottom",
+      "presentation": {
+        "Layer": "0",
+        "LineType": "1",
+        "LineWeight": "0.25",
+        "Color": "White"
+      }
+    },
+    {
+      "string": "T-101",
+      "owner_id": "1A01",
+      "symbol_id": "1A01",
+      "location": {
+        "x": 80,
+        "y": 355,
+        "z": 0
+      },
+      "rotation_deg": 0,
+      "height": 5,
+      "width": null,
+      "justification": "CenterBottom",
+      "presentation": null
+    },
+    {
+      "string": "∅80-IWW2-A1Y",
+      "owner_id": "2A03",
+      "symbol_id": null,
+      "location": {
+        "x": 250,
+        "y": 330,
+        "z": 0
+      },
+      "rotation_deg": 90,
+      "height": 3.5,
+      "width": null,
+      "justification": "LeftBottom",
+      "presentation": null
+    },
+    {
+      "string": "WW-02",
+      "owner_id": "4A01",
+      "symbol_id": "4A01",
+      "location": {
+        "x": 628,
+        "y": 398,
+        "z": 0
+      },
+      "rotation_deg": null,
+      "height": 3,
+      "width": null,
+      "justification": "LeftBottom",
+      "presentation": null
+    },
+    {
+      "string": "FT",
+      "owner_id": "5B01",
+      "symbol_id": "5B01",
+      "location": {
+        "x": 185,
+        "y": 202,
+        "z": 0
+      },
+      "rotation_deg": null,
+      "height": 3,
+      "width": null,
+      "justification": "CenterCenter",
+      "presentation": null
+    },
+    {
+      "string": "102",
+      "owner_id": "5B01",
+      "symbol_id": "5B01",
+      "location": {
+        "x": 185,
+        "y": 197,
+        "z": 0
+      },
+      "rotation_deg": null,
+      "height": 3,
+      "width": null,
+      "justification": "CenterCenter",
+      "presentation": null
+    }
+  ]
+}

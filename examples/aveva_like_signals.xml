@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AVEVA P&ID Proteus 3.3.3 내보내기 구조를 흉내 낸 테스트 도면 (ID 속성 없이 PersistentID 핸들만 사용) -->
+<PlantModel>
+  <PlantInformation SchemaVersion="3.3.3" OriginatingSystem="AVEVA PID" Date="2026-11-10" Units="mm">
+    <UnitsOfMeasure Distance="Millimetre"/>
+  </PlantInformation>
+  <Drawing Name="WW-01" Type="PID">
+    <Presentation Layer="0" LineType="1" LineWeight="0.35" Color="White" R="1" G="1" B="1"/>
+    <Extent><Min X="0" Y="0" Z="0"/><Max X="841" Y="594" Z="0"/></Extent>
+    <Line><Presentation Layer="0" LineType="1" LineWeight="0.5" Color="White"/><Coordinate X="5" Y="5" Z="0"/><Coordinate X="836" Y="5" Z="0"/></Line>
+    <Line><Presentation Layer="0" LineType="1" LineWeight="0.5" Color="White"/><Coordinate X="836" Y="5" Z="0"/><Coordinate X="836" Y="589" Z="0"/></Line>
+    <Line><Presentation Layer="0" LineType="1" LineWeight="0.5" Color="White"/><Coordinate X="836" Y="589" Z="0"/><Coordinate X="5" Y="589" Z="0"/></Line>
+    <Line><Presentation Layer="0" LineType="1" LineWeight="0.5" Color="White"/><Coordinate X="5" Y="589" Z="0"/><Coordinate X="5" Y="5" Z="0"/></Line>
+    <Text String="WASTEWATER TREATMENT - SHEET 1" Font="Arial" Justification="LeftBottom" Width="120" Height="5" TextAngle="0" SlantAngle="0">
+      <Presentation Layer="0" LineType="1" LineWeight="0.25" Color="White"/>
+      <Extent><Min X="620" Y="20" Z="0"/><Max X="740" Y="25" Z="0"/></Extent>
+      <Position><Location X="620" Y="20" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    </Text>
+  </Drawing>
+
+  <Equipment ComponentClass="Tank" ComponentName="TANK_V" TagName="T-101">
+    <Presentation Layer="AS_EQU" LineType="1" LineWeight="0.5" Color="White"/>
+    <Extent><Min X="50" Y="250" Z="0"/><Max X="110" Y="350" Z="0"/></Extent>
+    <Position><Location X="80" Y="300" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <Scale X="1" Y="1" Z="1"/>
+    <PersistentID Identifier="1A01" Context="WW-01"/>
+    <GenericAttributes Set="Tank" Number="2">
+      <GenericAttribute Name="Capacity" Format="number" Value="50" Units="m3"/>
+      <GenericAttribute Name="Fluid" Format="string" Value="IWW2"/>
+    </GenericAttributes>
+    <Text String="T-101" Justification="CenterBottom" Height="5" TextAngle="0">
+      <Position><Location X="80" Y="355" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    </Text>
+    <Nozzle ComponentClass="Nozzle" TagName="N1">
+      <Position><Location X="110" Y="300" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+      <PersistentID Identifier="1A02" Context="WW-01"/>
+      <ConnectionPoints NumPoints="2" FlowIn="0" FlowOut="1">
+        <Node><Position><Location X="110" Y="300" Z="0"/></Position></Node>
+        <Node><Position><Location X="112" Y="300" Z="0"/></Position><NominalDiameter Value="150" Units="mm"/></Node>
+      </ConnectionPoints>
+    </Nozzle>
+  </Equipment>
+
+  <Equipment ComponentClass="UnderwaterPump" ComponentName="PUMP_SUB" TagName="P-201">
+    <Presentation Layer="AS_EQU" LineType="1" LineWeight="0.5" Color="White"/>
+    <Extent><Min X="400" Y="230" Z="0"/><Max X="440" Y="270" Z="0"/></Extent>
+    <Position><Location X="420" Y="250" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <PersistentID Identifier="1B01" Context="WW-01"/>
+    <GenericAttributes Set="UnderwaterPump" Number="1"><GenericAttribute Name="Flow" Format="number" Value="30" Units="m3/h"/></GenericAttributes>
+    <Nozzle ComponentClass="Nozzle" TagName="N1">
+      <Position><Location X="400" Y="250" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="-1" Y="0" Z="0"/></Position>
+      <PersistentID Identifier="1B02" Context="WW-01"/>
+      <ConnectionPoints NumPoints="2" FlowIn="1" FlowOut="0">
+        <Node><Position><Location X="400" Y="250" Z="0"/></Position></Node>
+        <Node><Position><Location X="398" Y="250" Z="0"/></Position><NominalDiameter Value="100" Units="mm"/></Node>
+      </ConnectionPoints>
+    </Nozzle>
+  </Equipment>
+
+  <PipingNetworkSystem ComponentClass="PipingSystem" Specification="A1Y">
+    <Extent><Min X="110" Y="250" Z="0"/><Max X="610" Y="400" Z="0"/></Extent>
+    <PersistentID Identifier="2A00" Context="WW-01"/>
+    <GenericAttributes Set="PipingSystem" Number="1"><GenericAttribute Name="Fluid" Format="string" Value="IWW2"/></GenericAttributes>
+
+    <!-- 세그먼트 1: 탱크 노즐 -> 볼밸브 -> 티 (Connection 있음, 핸들 사용) -->
+    <PipingNetworkSegment ComponentClass="PipeLine" TagName="∅150" Specification="A1Y">
+      <Presentation Layer="AS_PIPE" LineType="1" LineWeight="0.5" Color="Green" R="0" G="1" B="0"/>
+      <Extent><Min X="112" Y="295" Z="0"/><Max X="260" Y="305" Z="0"/></Extent>
+      <PersistentID Identifier="2A01" Context="WW-01"/>
+      <GenericAttributes Set="PipeLine" Number="6">
+        <GenericAttribute Name="Size" Format="number" Value="150" Units="mm"/>
+        <GenericAttribute Name="Fluid" Format="string" Value="IWW2"/>
+        <GenericAttribute Name="connected_handle_from" Format="string" Value="1A02"/>
+        <GenericAttribute Name="connected_handle_to" Format="string" Value="3A01"/>
+        <GenericAttribute Name="connected_pdms_type_from" Format="string" Value="NOZZ"/>
+        <GenericAttribute Name="connected_pdms_type_to" Format="string" Value="TEE"/>
+      </GenericAttributes>
+      <Component ComponentClass="CenterLine">
+        <PersistentID Identifier="2A0A" Context="WW-01"/>
+        <PolyLine NumPoints="2"><Coordinate X="112" Y="300" Z="0"/><Coordinate X="180" Y="300" Z="0"/></PolyLine>
+        <NominalDiameter Value="150" Units="mm"/>
+      </Component>
+      <PipingComponent ComponentClass="BallValve" ComponentName="VALVE_BALL" TagName="V-101">
+        <Presentation Layer="AS_PIPE" LineType="1" LineWeight="0.35" Color="White"/>
+        <Extent><Min X="180" Y="295" Z="0"/><Max X="190" Y="305" Z="0"/></Extent>
+        <Position><Location X="185" Y="300" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+        <Scale X="1" Y="1" Z="1"/>
+        <PersistentID Identifier="3A00" Context="WW-01"/>
+        <GenericAttributes Set="BallValve" Number="2">
+          <GenericAttribute Name="Body" Format="string" Value="BALL VALVE"/>
+          <GenericAttribute Name="Closure" Format="string" Value="NO"/>
+        </GenericAttributes>
+        <Line><Coordinate X="180" Y="295" Z="0"/><Coordinate X="190" Y="305" Z="0"/></Line>
+        <Line><Coordinate X="180" Y="305" Z="0"/><Coordinate X="190" Y="295" Z="0"/></Line>
+      </PipingComponent>
+      <Component ComponentClass="CenterLine">
+        <PersistentID Identifier="2A0B" Context="WW-01"/>
+        <PolyLine NumPoints="2"><Coordinate X="190" Y="300" Z="0"/><Coordinate X="250" Y="300" Z="0"/></PolyLine>
+      </Component>
+      <PipingComponent ComponentClass="Tee" ComponentName="TEE_EQ">
+        <Extent><Min X="250" Y="295" Z="0"/><Max X="260" Y="305" Z="0"/></Extent>
+        <Position><Location X="255" Y="300" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+        <PersistentID Identifier="3A01" Context="WW-01"/>
+        <GenericAttributes Set="PID_FIT" Number="1"><GenericAttribute Name="PdmsType" Format="string" Value="TEE"/></GenericAttributes>
+        <ConnectionPoints NumPoints="4">
+          <Node><Position><Location X="255" Y="300" Z="0"/></Position></Node>
+          <Node><Position><Location X="250" Y="300" Z="0"/></Position></Node>
+          <Node><Position><Location X="260" Y="300" Z="0"/></Position></Node>
+          <Node><Position><Location X="255" Y="305" Z="0"/></Position></Node>
+        </ConnectionPoints>
+      </PipingComponent>
+      <Connection FromID="1A02" FromNode="1" ToID="3A01" ToNode="1"/>
+    </PipingNetworkSegment>
+
+    <!-- 세그먼트 2: 티 -> (꺾임 2번) -> 펌프 노즐. Connection 없음, connected_handle_from/to만 있음 -->
+    <PipingNetworkSegment ComponentClass="PipeLine" TagName="∅100" Specification="A1Y">
+      <PersistentID Identifier="2A02" Context="WW-01"/>
+      <GenericAttributes Set="PipeLine" Number="5">
+        <GenericAttribute Name="Size" Format="number" Value="100" Units="mm"/>
+        <GenericAttribute Name="connected_handle_from" Format="string" Value="3A01"/>
+        <GenericAttribute Name="connected_handle_to" Format="string" Value="1B02"/>
+        <GenericAttribute Name="connected_pdms_type_from" Format="string" Value="TEE"/>
+        <GenericAttribute Name="connected_pdms_type_to" Format="string" Value="NOZZ"/>
+      </GenericAttributes>
+      <Component ComponentClass="CenterLine">
+        <PersistentID Identifier="2A0C" Context="WW-01"/>
+        <PolyLine NumPoints="4"><Coordinate X="260" Y="300" Z="0"/><Coordinate X="320" Y="300" Z="0"/><Coordinate X="320" Y="250" Z="0"/><Coordinate X="398" Y="250" Z="0"/></PolyLine>
+      </Component>
+      <PipeFlowArrow ComponentClass="PipeFlowArrow">
+        <Extent><Min X="287" Y="297" Z="0"/><Max X="293" Y="303" Z="0"/></Extent>
+        <Position><Location X="290" Y="300" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+        <PersistentID Identifier="2AF1" Context="WW-01"/>
+        <Shape><Coordinate X="287" Y="297" Z="0"/><Coordinate X="293" Y="300" Z="0"/><Coordinate X="287" Y="303" Z="0"/></Shape>
+      </PipeFlowArrow>
+      <InsulationSymbol ComponentClass="ArrowMiddle">
+        <Extent><Min X="355" Y="246" Z="0"/><Max X="365" Y="254" Z="0"/></Extent>
+        <Position><Location X="360" Y="250" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+        <PersistentID Identifier="2AF2" Context="WW-01"/>
+        <GenericAttributes Set="Insulation" Number="1"><GenericAttribute Name="insulation_condition" Format="string" Value="HOT"/></GenericAttributes>
+      </InsulationSymbol>
+    </PipingNetworkSegment>
+
+    <!-- 세그먼트 3: 티 분기 -> 꺾임 -> 사양 변경점 -> 시트 밖으로 (OPC) -->
+    <PipingNetworkSegment ComponentClass="PipeLine" TagName="∅80" Specification="A1Y">
+      <PersistentID Identifier="2A03" Context="WW-01"/>
+      <GenericAttributes Set="PipeLine" Number="2">
+        <GenericAttribute Name="Size" Format="number" Value="80" Units="mm"/>
+        <GenericAttribute Name="BranchId" Format="string" Value="2"/>
+      </GenericAttributes>
+      <Component ComponentClass="CenterLine">
+        <PersistentID Identifier="2A0D" Context="WW-01"/>
+        <PolyLine NumPoints="3"><Coordinate X="255" Y="305" Z="0"/><Coordinate X="255" Y="400" Z="0"/><Coordinate X="600" Y="400" Z="0"/></PolyLine>
+      </Component>
+      <PropertyBreak ComponentClass="SpecificationBreak">
+        <Extent><Min X="395" Y="395" Z="0"/><Max X="405" Y="405" Z="0"/></Extent>
+        <Position><Location X="400" Y="400" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+        <PersistentID Identifier="2AF3" Context="WW-01"/>
+      </PropertyBreak>
+      <Text String="∅80-IWW2-A1Y" Justification="LeftBottom" Height="3.5" TextAngle="90">
+        <Position><Location X="250" Y="330" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+      </Text>
+      <Connection FromID="3A01" FromNode="3" ToID="4A01" ToNode="1"/>
+    </PipingNetworkSegment>
+  </PipingNetworkSystem>
+
+  <PipeConnectorSymbol ComponentClass="PipeConnectionFlagOutbound" ComponentName="OPC_OUT">
+    <Extent><Min X="600" Y="395" Z="0"/><Max X="625" Y="405" Z="0"/></Extent>
+    <Position><Location X="610" Y="400" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <Scale X="1" Y="1" Z="1"/>
+    <PersistentID Identifier="4A01" Context="WW-01"/>
+    <GenericAttributes Set="PipeConnector" Number="1"><GenericAttribute Name="pipe_note1" Format="string" Value="TO EQ TANK"/></GenericAttributes>
+    <ConnectionPoints NumPoints="2">
+      <Node><Position><Location X="610" Y="400" Z="0"/></Position></Node>
+      <Node><Position><Location X="600" Y="400" Z="0"/></Position><NominalDiameter Value="80" Units="mm"/></Node>
+    </ConnectionPoints>
+    <CrossPageConnection DrawingName="WW-02" LinkLabel="IWW2"/>
+    <Text String="WW-02" Justification="LeftBottom" Height="3"><Position><Location X="628" Y="398" Z="0"/></Position></Text>
+  </PipeConnectorSymbol>
+
+  <ProcessInstrument ComponentClass="LevelTransmitter" ComponentName="INST_BUBBLE" TagName="LT-101">
+    <Extent><Min X="72" Y="412" Z="0"/><Max X="88" Y="428" Z="0"/></Extent>
+    <Position><Location X="80" Y="420" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <PersistentID Identifier="5A01" Context="WW-01"/>
+    <Circle Radius="8"><Position><Location X="80" Y="420" Z="0"/></Position></Circle>
+  </ProcessInstrument>
+
+  <SignalLine ComponentClass="Electric">
+    <Presentation Layer="AS_INST" LineType="2" LineWeight="0.25" Color="White"/>
+    <Extent><Min X="80" Y="350" Z="0"/><Max X="80" Y="412" Z="0"/></Extent>
+    <Position><Location X="80" Y="412" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <Scale X="1" Y="1" Z="1"/>
+    <PersistentID Identifier="5A10" Context="WW-01"/>
+    <PolyLine NumPoints="2"><Coordinate X="80" Y="412" Z="0"/><Coordinate X="80" Y="350" Z="0"/></PolyLine>
+    <Connection FromID="5A01" ToID="1A01"/>
+  </SignalLine>
+  <!-- 자기 Position/Extent 없이 안쪽 그래픽만 있는 계기 -->
+  <ProcessInstrument ComponentClass="FlowTransmitter" ComponentName="INST_BUBBLE" TagName="FT-102">
+    <PersistentID Identifier="5B01" Context="WW-01"/>
+    <Circle Radius="8"><Presentation Layer="AS_INST"/><Position><Location X="185" Y="200" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position></Circle>
+    <Text String="FT" Justification="CenterCenter" Height="3"><Position><Location X="185" Y="202" Z="0"/></Position></Text>
+    <Text String="102" Justification="CenterCenter" Height="3"><Position><Location X="185" Y="197" Z="0"/></Position></Text>
+  </ProcessInstrument>
+  <!-- 다른 시트로 넘어가는 신호 커넥터 (Shape만 있음) -->
+  <SignalConnectorSymbol ComponentClass="SignalConnectionFlagOutbound" ComponentName="SIG_OUT">
+    <PersistentID Identifier="5C01" Context="WW-01"/>
+    <Shape><Coordinate X="300" Y="195" Z="0"/><Coordinate X="320" Y="195" Z="0"/><Coordinate X="325" Y="200" Z="0"/><Coordinate X="320" Y="205" Z="0"/><Coordinate X="300" Y="205" Z="0"/></Shape>
+    <CrossPageConnection DrawingName="WW-03" LinkLabel="FIC-102"/>
+  </SignalConnectorSymbol>
+  <!-- Connection 없는 Electric 신호선: 끝점 좌표로 계기/커넥터에 붙어야 함 -->
+  <SignalLine ComponentClass="Electric">
+    <Extent><Min X="193" Y="200" Z="0"/><Max X="300" Y="200" Z="0"/></Extent>
+    <Position><Location X="193" Y="200" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <PersistentID Identifier="5B10" Context="WW-01"/>
+    <PolyLine NumPoints="2"><Coordinate X="193" Y="200" Z="0"/><Coordinate X="300" Y="200" Z="0"/></PolyLine>
+  </SignalLine>
+  <!-- 그래픽이 전혀 없는 계기: 신호선 연결로 이웃 위치 추정 -->
+  <InstrumentComponent ComponentClass="ControlValveActuator" TagName="FV-102">
+    <PersistentID Identifier="5B02" Context="WW-01"/>
+  </InstrumentComponent>
+  <SignalLine ComponentClass="Pneumatic">
+    <PersistentID Identifier="5B11" Context="WW-01"/>
+    <Connection FromID="5B01" ToID="5B02"/>
+  </SignalLine>
+  <SignalLine ComponentClass="Electric">
+    <PersistentID Identifier="5B12" Context="WW-01"/>
+    <Connection FromID="5B02" ToID="3A00"/>
+  </SignalLine>
+</PlantModel>

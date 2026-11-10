@@ -150,7 +150,25 @@
         "rotation_deg": 0.0,
         "mirrored": false
       },
-      "extent": null,
+      "extent": {
+        "min": {
+          "x": 110.0,
+          "y": 300.0,
+          "z": null
+        },
+        "max": {
+          "x": 112.0,
+          "y": 300.0,
+          "z": null
+        },
+        "width": 2.0,
+        "height": 0.0,
+        "center": {
+          "x": 111.0,
+          "y": 300.0
+        },
+        "derived": true
+      },
       "scale": null,
       "presentation": null,
       "persistent_id": {
@@ -296,7 +314,25 @@
         "rotation_deg": 180.0,
         "mirrored": false
       },
-      "extent": null,
+      "extent": {
+        "min": {
+          "x": 398.0,
+          "y": 250.0,
+          "z": null
+        },
+        "max": {
+          "x": 400.0,
+          "y": 250.0,
+          "z": null
+        },
+        "width": 2.0,
+        "height": 0.0,
+        "center": {
+          "x": 399.0,
+          "y": 250.0
+        },
+        "derived": true
+      },
       "scale": null,
       "presentation": null,
       "persistent_id": {

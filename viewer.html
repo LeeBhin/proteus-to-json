@@ -178,6 +178,24 @@ function parseNd(el) {
   if (!nd) nd = Array.from(el.getElementsByTagName("*")).find(d => tagOf(d) === "NominalDiameter") || null;
   return nd ? { value: num(attr(nd, "Value")), units: attr(nd, "Units") } : null;
 }
+// 자기 Extent가 없는 심볼: 안쪽 그래픽(Extent, Coordinate, Circle/Ellipse, Text 위치)으로 바운딩 박스 계산
+function derivedExtent(el) {
+  const xs = [], ys = [], used = new Set();
+  const add = (x, y, r = 0) => { if (typeof x === "number" && typeof y === "number") { xs.push(x - r, x + r); ys.push(y - r, y + r); } };
+  for (const d of el.getElementsByTagName("*")) {
+    const t = tagOf(d);
+    if (t === "Circle" || t === "Ellipse") {
+      const loc = (tagOf(d) === "Location" ? d : null) || Array.from(d.getElementsByTagName("*")).find(q => tagOf(q) === "Location") || null;
+      let r = num(attr(d, "Radius"));
+      if (typeof r !== "number") { const rs = [num(attr(d, "PrimaryRadius")), num(attr(d, "SecondaryRadius"))].filter(v => typeof v === "number"); r = rs.length ? Math.max(...rs) : 0; }
+      if (loc) { used.add(loc); add(num(attr(loc, "X")), num(attr(loc, "Y")), r); }
+    } else if (t === "Min" || t === "Max" || t === "Coordinate" || (t === "Location" && !used.has(d))) add(num(attr(d, "X")), num(attr(d, "Y")));
+  }
+  if (!xs.length) return null;
+  const r6 = v => Math.round(v * 1e6) / 1e6, x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys);
+  return { min: { x: r6(x0), y: r6(y0), z: null }, max: { x: r6(x1), y: r6(y1), z: null }, width: r6(x1 - x0), height: r6(y1 - y0),
+    center: { x: r6((x0 + x1) / 2), y: r6((y0 + y1) / 2) }, derived: true };
+}
 function parseCrossPage(el) { const c = kid(el, "CrossPageConnection"); return c ? { drawing_name: attr(c, "DrawingName"), link_label: attr(c, "LinkLabel") } : null; }
 // 선 요소(SignalLine 등): Position 없이 자기 선 형상을 가진 요소 -> 심볼이 아니라 엣지
 function isLineEl(el) {
@@ -310,7 +328,7 @@ function parseProteus(doc, fileName) {
     } else if (!NON_SYMBOL.has(t) && eidOf(el) && (kid(el, "Position") || kid(el, "Extent") || attr(el, "ComponentClass") != null)) {
       const position = parsePosition(el), scale = xyz(kid(el, "Scale"));
       const it = { id: eidOf(el), type: t, component_class: attr(el, "ComponentClass"), component_name: attr(el, "ComponentName"),
-        tag_name: attr(el, "TagName"), parent_id: ownerId(el), position, extent: fixExtent(parseExtent(el), position, scale),
+        tag_name: attr(el, "TagName"), parent_id: ownerId(el), position, extent: fixExtent(parseExtent(el), position, scale) || derivedExtent(el),
         persistent_id: parsePid(el), attributes: parseAttrs(el), connection_points: parseCP(el),
         nominal_diameter: parseNd(el), cross_page: parseCrossPage(el), annotation: ANNOTATION_TAGS.has(t) };
       it.virtual = isVirtual(it);
@@ -650,8 +668,25 @@ function buildGraph(data, tol = null) {
     edges.push({ id: nid(ln.id), type: ln.kind, from: ends[0][0], to: ends[1][0], line_type: ln.type, signal_type: ln.component_class ?? null, tag: ln.tag_name, drawing: dname,
       connection_inferred: ["start", "end"].filter((_, i) => ends[i][1]).join(";") || null, ...flatProps(ln.attributes, "attr_") });
   }
+  // 위치를 못 구한 노드: 연결된 이웃 노드들의 평균 위치 (position_inferred)
+  const noPos = [...nodes.values()].filter(n => n.x == null);
+  const adj = new Map();
+  for (const e of edges) { if (!adj.has(e.from)) adj.set(e.from, []); adj.get(e.from).push(e.to); if (!adj.has(e.to)) adj.set(e.to, []); adj.get(e.to).push(e.from); }
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = false;
+    for (const n of noPos) {
+      if (n.x != null) continue;
+      const pts = (adj.get(n.id) || []).map(m => nodes.get(m)).filter(m => m && m.x != null);
+      if (pts.length) {
+        n.x = Math.round(pts.reduce((a, m) => a + m.x, 0) / pts.length * 1e6) / 1e6;
+        n.y = Math.round(pts.reduce((a, m) => a + m.y, 0) / pts.length * 1e6) / 1e6;
+        n.position_inferred = true; changed = true;
+      }
+    }
+    if (!changed) break;
+  }
   const nl = [...nodes.values()];
-  return { drawing: dname, summary: { nodes: nl.length, edges: edges.length, pipe_edges: edges.filter(e => e.type === "PIPE").length,
+  return { drawing: dname, summary: { nodes: nl.length, nodes_without_position: noPos.length, nodes_position_inferred: noPos.filter(n => n.position_inferred).length, edges: edges.length, pipe_edges: edges.filter(e => e.type === "PIPE").length,
     tees: nl.filter(n => n.label === "Tee").length,
     bend_tees: nl.filter(n => n.label === "Tee" && n.tee_kinds.includes("bend")).length,
     branch_tees: nl.filter(n => n.label === "Tee" && n.tee_kinds.includes("branch")).length,
@@ -831,7 +866,7 @@ function drawDrawing() {
     const R = nodeRect(n), small = R.w * R.h <= 26 * 26;
     ctx.fillStyle = st.c + (small ? "e6" : "40"); ctx.fillRect(R.x, R.y, R.w, R.h);
     ctx.strokeStyle = isSel ? "#fff" : st.c; ctx.lineWidth = isSel ? 2.5 : (isHov ? 2.2 : 1.4);
-    ctx.setLineDash(R.sized ? [] : [2, 2]); ctx.strokeRect(R.x, R.y, R.w, R.h); ctx.setLineDash([]);
+    ctx.setLineDash(R.sized && !n.position_inferred ? [] : [2, 2]); ctx.strokeRect(R.x, R.y, R.w, R.h); ctx.setLineDash([]);
     // 캡션: 같은 글자의 도면 텍스트가 보이면 생략, 안에 들어가면 안쪽, 아니면 위
     const cap = n.tag || (n.kind === "Nozzle" ? "" : n.label);
     if (o.label && cap && !(o.text && taggedByText.has(n.id))) {
@@ -1264,7 +1299,8 @@ function loadFile(file) {
       $("file-name").textContent = `${file.name} · ${G.drawing}${pi.OriginatingSystem ? " · " + pi.OriginatingSystem : ""}${pi.SchemaVersion ? " " + pi.SchemaVersion : ""}`
         + ` · 중심선 점 ${G.summary.centerline_points}개, 중심선 없는 세그먼트 ${G.summary.segments_without_centerline}/${data.pipes.length}`
         + `, 세그먼트 밖 CenterLine ${G.summary.centerlines_outside_segment}개(미배정 ${G.summary.centerlines_unassigned})`
-        + `, Tee 부품 ${G.summary.component_tees}개, 좌표로 추정한 연결 ${G.summary.inferred_connection_ends}곳`;
+        + `, Tee 부품 ${G.summary.component_tees}개, 좌표로 추정한 연결 ${G.summary.inferred_connection_ends}곳`
+        + `, 신호선 ${G.summary.line_edges}개(연결 못 함 ${G.summary.lines_unconnected}), 위치 없는 노드 ${G.summary.nodes_without_position}개(이웃으로 추정 ${G.summary.nodes_position_inferred})`;
       drop.classList.add("hidden"); $("err").textContent = "";
       showDetail(); resize(); fit();
     } catch (err) {

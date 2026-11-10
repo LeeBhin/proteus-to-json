@@ -201,6 +201,38 @@ def parse_nd(el):
     return {"value": num(attr(nd, "Value")), "units": attr(nd, "Units")}
 
 
+def derived_extent(el):
+    """자기 Extent가 없는 심볼: 안쪽 그래픽(Extent, Coordinate, Circle/Ellipse, Text 위치)으로 바운딩 박스 계산"""
+    xs, ys, used = [], [], set()
+
+    def add(x, y, r=0.0):
+        if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+            xs.extend((x - r, x + r)); ys.extend((y - r, y + r))
+
+    for d in el.iter():
+        if d is el:
+            continue
+        t = local(d.tag)
+        if t in ("Circle", "Ellipse"):
+            loc = next((q for q in d.iter() if local(q.tag) == "Location"), None)
+            r = num(attr(d, "Radius"))
+            if not isinstance(r, (int, float)):
+                rs = [v for v in (num(attr(d, "PrimaryRadius")), num(attr(d, "SecondaryRadius"))) if isinstance(v, (int, float))]
+                r = max(rs) if rs else 0.0
+            if loc is not None:
+                used.add(loc)
+                add(num(attr(loc, "X")), num(attr(loc, "Y")), r)
+        elif t in ("Min", "Max", "Coordinate") or (t == "Location" and d not in used):
+            add(num(attr(d, "X")), num(attr(d, "Y")))
+    if not xs:
+        return None
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    r6 = lambda v: round(v, 6)
+    return {"min": {"x": r6(x0), "y": r6(y0), "z": None}, "max": {"x": r6(x1), "y": r6(y1), "z": None},
+            "width": r6(x1 - x0), "height": r6(y1 - y0), "center": {"x": r6((x0 + x1) / 2), "y": r6((y0 + y1) / 2)},
+            "derived": True}
+
+
 def parse_cross_page(el):
     cp = child(el, "CrossPageConnection")
     if cp is None:
@@ -402,7 +434,7 @@ class ProteusParser:
             "tag_name": attr(el, "TagName"),
             "parent_id": self.owner_id(el),                # 노즐 -> 기기, 부품 -> 세그먼트
             "position": position,
-            "extent": fix_extent(parse_extent(el), position, scale),
+            "extent": fix_extent(parse_extent(el), position, scale) or derived_extent(el),
             "scale": scale,
             "presentation": parse_presentation(el),
             "persistent_id": parse_persistent_id(el),
@@ -1073,10 +1105,32 @@ def build_graph(p, data, tol=None, include_geometry=False):
         e.update(_flat_props(ln["attributes"], "attr_"))
         edges.append(e)
 
+    # 8) 위치를 못 구한 노드: 연결된 이웃 노드들의 평균 위치 (position_inferred)
+    no_pos = [n for n in nodes.values() if n.get("x") is None]
+    adj = {}
+    for e in edges:
+        adj.setdefault(e["from"], []).append(e["to"])
+        adj.setdefault(e["to"], []).append(e["from"])
+    for _ in range(5):
+        changed = False
+        for n in no_pos:
+            if n.get("x") is not None:
+                continue
+            pts = [(nodes[m]["x"], nodes[m]["y"]) for m in adj.get(n["id"], []) if m in nodes and nodes[m].get("x") is not None]
+            if pts:
+                n["x"] = round(sum(q[0] for q in pts) / len(pts), 6)
+                n["y"] = round(sum(q[1] for q in pts) / len(pts), 6)
+                n["position_inferred"] = True
+                changed = True
+        if not changed:
+            break
+
     return {
         "drawing": dname,
         "summary": {
             "nodes": len(nodes),
+            "nodes_without_position": len(no_pos),
+            "nodes_position_inferred": sum(1 for n in no_pos if n.get("position_inferred")),
             "edges": len(edges),
             "pipe_edges": sum(1 for e in edges if e["type"] == "PIPE"),
             "tees": sum(1 for n in nodes.values() if n["label"] == "Tee"),
