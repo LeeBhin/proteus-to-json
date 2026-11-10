@@ -157,11 +157,34 @@ function ancestor(el, name) { let p = el.parentElement; while (p) { if (tagOf(p)
 function eidOf(el) { const v = attr(el, "ID"); if (v) return v; const p = kid(el, "PersistentID"); return p ? attr(p, "Identifier") : null; }
 function ownerId(el) { let p = el.parentElement; while (p) { if (tagOf(p) !== "PersistentID" && eidOf(p)) return eidOf(p); p = p.parentElement; } return null; }
 const SIGNAL_RE = /signal|information|instrument|measur|actuat/i;
-// 선 요소(계기 신호선 등): 자기 CenterLine/Coordinate를 갖고 Position이 없는 요소 -> 심볼이 아니라 엣지
+const ANNOTATION_TAGS = new Set(["PipeFlowArrow", "InsulationSymbol"]);   // 노드로 만들지 않는 표시용 심볼
+const GEOM_LIST_TAGS = new Set(["PolyLine", "Polyline", "Line", "CenterLine", "Shape"]);
+const CENTERLINE_RE = /^center[ _-]?line$/i;
+// 배관/신호선 형상을 담는 요소: CenterLine 요소, 또는 <Component ComponentClass="CenterLine">
+const isGeomCarrier = el => tagOf(el) === "CenterLine" || (tagOf(el) === "Component" && CENTERLINE_RE.test(attr(el, "ComponentClass") || ""));
+function pointLists(el) {
+  const out = [], own = kids(el, "Coordinate").map(xyz).filter(Boolean);
+  if (own.length) out.push(own);
+  for (const d of el.getElementsByTagName("*")) {
+    if (!GEOM_LIST_TAGS.has(tagOf(d))) continue;
+    const pts = kids(d, "Coordinate").map(xyz).filter(Boolean); if (pts.length) out.push(pts);
+  }
+  return out;
+}
+function inGeom(el) { for (let p = el.parentElement; p; p = p.parentElement) if (isGeomCarrier(p) || tagOf(p) === "Component") return true; return false; }
+function parseNd(el) {
+  let nd = kid(el, "NominalDiameter");
+  if (!nd) nd = Array.from(el.getElementsByTagName("*")).find(d => tagOf(d) === "NominalDiameter") || null;
+  return nd ? { value: num(attr(nd, "Value")), units: attr(nd, "Units") } : null;
+}
+function parseCrossPage(el) { const c = kid(el, "CrossPageConnection"); return c ? { drawing_name: attr(c, "DrawingName"), link_label: attr(c, "LinkLabel") } : null; }
+// 선 요소(SignalLine 등): Position 없이 자기 선 형상을 가진 요소 -> 심볼이 아니라 엣지
 function isLineEl(el) {
   const t = tagOf(el);
-  if (NON_SYMBOL.has(t) || kid(el, "Position")) return false;
-  if (kid(el, "CenterLine") || kid(el, "Coordinate")) return true;
+  if (NON_SYMBOL.has(t) || t === "Component" || kid(el, "Position")) return false;
+  if (t === "SignalLine" || /(Signal|Information)(Line|Flow)$/.test(t)) return true;
+  if (["CenterLine", "Coordinate", "PolyLine", "Polyline"].some(k => kid(el, k))) return true;
+  if (Array.from(el.children).some(isGeomCarrier)) return true;
   return /(Line|Flow)$/.test(t) && !!kid(el, "Connection");
 }
 // Extent가 위치와 동떨어져 있으면 심볼 로컬 좌표로 보고 위치/회전/배율/반전 적용
@@ -222,7 +245,8 @@ function parseCP(el) {
   const nodes = kids(cp, "Node").map((n, i) => {
     const loc = n.getElementsByTagNameNS("*", "Location")[0] || n.getElementsByTagName("Location")[0] || null;
     let role = null; if (i === fi) role = "in"; if (i === fo) role = role ? "in/out" : "out";
-    return { index: i, id: attr(n, "ID"), type: attr(n, "Type"), location: xyz(loc), flow: role };
+    const nd = kid(n, "NominalDiameter");
+    return { index: i, id: attr(n, "ID"), type: attr(n, "Type"), location: xyz(loc), flow: role, nominal_diameter: nd ? { value: num(attr(nd, "Value")), units: attr(nd, "Units") } : null };
   });
   return { num_points: num(attr(cp, "NumPoints")), flow_in: fi, flow_out: fo, nodes };
 }
@@ -250,7 +274,8 @@ function parseProteus(doc, fileName) {
       const sys = ancestor(el, "PipingNetworkSystem");
       const sa = parseAttrs(sys), ga = parseAttrs(el);
       const it = { id: eidOf(el), system_id: sys ? eidOf(sys) : null, component_class: attr(el, "ComponentClass"),
-        tag_name: attr(el, "TagName") || attr(sys, "TagName"), persistent_id: parsePid(el), attributes: { ...sa, ...ga } };
+        tag_name: attr(el, "TagName") || attr(sys, "TagName"), persistent_id: parsePid(el), attributes: { ...sa, ...ga },
+        nominal_diameter: (() => { for (const c of el.children) if (isGeomCarrier(c)) { const nd = parseNd(c); if (nd) return nd; } return null; })() };
       it.virtual = isVirtual(it);
       pipes.push(it); byId[it.id] = it; segEl[it.id] = el; (sysSegs[it.system_id] = sysSegs[it.system_id] || []).push(it.id);
     } else if (t === "Connection") {
@@ -260,7 +285,7 @@ function parseProteus(doc, fileName) {
         continue;
       }
       const seg = ancestor(el, "PipingNetworkSegment");
-      connections.push({ segment_id: seg ? attr(seg, "ID") : ownerId(el), from_id: attr(el, "FromID"), from_node: num(attr(el, "FromNode")),
+      connections.push({ segment_id: seg ? eidOf(seg) : ownerId(el), from_id: attr(el, "FromID"), from_node: num(attr(el, "FromNode")),
         to_id: attr(el, "ToID"), to_node: num(attr(el, "ToNode")) });
     } else if (t === "Text") {
       const pos = parsePosition(el);
@@ -270,18 +295,20 @@ function parseProteus(doc, fileName) {
         if (pid && byId[pid] && "type" in byId[pid] && !(pid in segEl)) { symId = pid; break; }
       }
       texts.push({ string: attr(el, "String"), owner_id: ownerId(el), symbol_id: symId, location: pos ? pos.location : null,
-        rotation_deg: pos ? pos.rotation_deg ?? null : null, height: num(attr(el, "Height")), width: num(attr(el, "Width")), justification: attr(el, "Justification") });
+        rotation_deg: num(attr(el, "TextAngle")) != null ? num(attr(el, "TextAngle")) : (pos ? pos.rotation_deg ?? null : null), height: num(attr(el, "Height")), width: num(attr(el, "Width")), justification: attr(el, "Justification") });
     } else if (isLineEl(el) && eidOf(el)) {
-      const pts = [];
-      for (const cl of [el, ...kids(el, "CenterLine")]) for (const c of kids(cl, "Coordinate")) { const q = xyz(c); if (q) pts.push(q); }
+      const pts = pointLists(el).flat();
       const it = { id: eidOf(el), type: t, kind: SIGNAL_RE.test(t) ? "SIGNAL" : "LINE", component_class: attr(el, "ComponentClass"), tag_name: attr(el, "TagName"),
         persistent_id: parsePid(el), attributes: parseAttrs(el), points: pts, from_id: null, from_node: null, to_id: null, to_node: null };
       lines.push(it); lineByEl.set(el, it);
+    } else if (t === "Component" || isGeomCarrier(el) || inGeom(el)) {
+      continue;                                        // 형상(중심선 등) - 심볼 아님
     } else if (!NON_SYMBOL.has(t) && eidOf(el) && (kid(el, "Position") || kid(el, "Extent") || attr(el, "ComponentClass") != null)) {
       const position = parsePosition(el), scale = xyz(kid(el, "Scale"));
       const it = { id: eidOf(el), type: t, component_class: attr(el, "ComponentClass"), component_name: attr(el, "ComponentName"),
         tag_name: attr(el, "TagName"), parent_id: ownerId(el), position, extent: fixExtent(parseExtent(el), position, scale),
-        persistent_id: parsePid(el), attributes: parseAttrs(el), connection_points: parseCP(el) };
+        persistent_id: parsePid(el), attributes: parseAttrs(el), connection_points: parseCP(el),
+        nominal_diameter: parseNd(el), cross_page: parseCrossPage(el), annotation: ANNOTATION_TAGS.has(t) };
       it.virtual = isVirtual(it);
       symbols.push(it); byId[it.id] = it;
     }
@@ -334,7 +361,8 @@ function buildGraph(data, tol = null) {
   const dname = (data.drawing && data.drawing.name) || data.source_file.replace(/\.[^.]+$/, "");
   const nid = raw => `${dname}:${raw}`;
   const nodes = new Map(), edges = [];
-  const sym = Object.fromEntries(data.symbols.map(s => [s.id, s]));
+  const symList = data.symbols.filter(s => !s.annotation);          // 유동 화살표/보온 표시는 노드 아님
+  const sym = Object.fromEntries(symList.map(s => [s.id, s]));
   const segInfo = Object.fromEntries(data.pipes.map(s => [s.id, s]));
   const connOf = {}; for (const c of data.connections) if (!(c.segment_id in connOf)) connOf[c.segment_id] = c;
   const addNode = (id, label, props) => { if (!nodes.has(id)) nodes.set(id, { id, label, ...props }); return id; };
@@ -343,20 +371,22 @@ function buildGraph(data, tol = null) {
   // 실제 Tee 부품 (ComponentClass에 tee 포함, 또는 PdmsType = TEE)
   const isTeeSym = s => /tee/i.test(s.component_class || "") ||
     Object.entries(s.attributes || {}).some(([k, v]) => /^pdms[ _-]?type$/i.test(k) && String(v).trim().toUpperCase() === "TEE");
-  for (const s of data.symbols) {
+  for (const s of symList) {
     const pos = s.position || {}, ext = s.extent || {};
     const loc = XY(pos.location) || XY(ext.center);
-    const tee = isTeeSym(s);
+    const tee = isTeeSym(s), nd = s.nominal_diameter || {}, cp = s.cross_page, cc = (s.component_class || "").toLowerCase();
     addNode(nid(s.id), tee ? "Tee" : (s.component_class || s.type), {
       kind: s.type, component_class: s.component_class, component_name: s.component_name, tag: s.tag_name, source_id: s.id,
       x: loc ? loc[0] : null, y: loc ? loc[1] : null, rotation_deg: pos.rotation_deg ?? null, mirrored: pos.mirrored ?? null,
       width: ext.width ?? null, height: ext.height ?? null,
       min_x: ext.min?.x ?? null, min_y: ext.min?.y ?? null, max_x: ext.max?.x ?? null, max_y: ext.max?.y ?? null, persistent_id: (s.persistent_id || {}).identifier || null, drawing: dname,
       ...(tee ? { tee_kinds: "branch", tee_source: "component" } : {}),
+      ...(nd.value != null ? { nominal_diameter: nd.value, nominal_diameter_units: nd.units ?? null } : {}),
+      ...(cp ? { cross_drawing: cp.drawing_name ?? null, cross_link_label: cp.link_label ?? null, connector_direction: cc.includes("inbound") ? "in" : cc.includes("outbound") ? "out" : null } : {}),
       ...flatProps(s.attributes, "attr_"),
     });
   }
-  for (const s of data.symbols) if (has(sym, s.parent_id)) edges.push({ id: `${nid(s.id)}>PART_OF`, type: "PART_OF", from: nid(s.id), to: nid(s.parent_id) });
+  for (const s of symList) if (has(sym, s.parent_id)) edges.push({ id: `${nid(s.id)}>PART_OF`, type: "PART_OF", from: nid(s.id), to: nid(s.parent_id) });
 
   const teeAt = new Map();
   const tee = (xy, kind) => {
@@ -409,20 +439,24 @@ function buildGraph(data, tol = null) {
   };
   const segLines = {}; for (const sid of Object.keys(data._segEl)) segLines[sid] = [];
   const sysLines = {}; let unassignedLines = 0, outsideLines = 0;
-  for (const cl of data._all) {
-    if (tagOf(cl) !== "CenterLine") continue;
-    const pts = kids(cl, "Coordinate").map(c => XY(xyz(c))).filter(Boolean); if (!pts.length) continue;
-    if (data._lineEls.has(cl.parentElement)) continue;   // 신호선 등 선 요소의 CenterLine 제외
+  const inLineEl = el => { for (let q = el.parentElement; q; q = q.parentElement) if (data._lineEls.has(q)) return true; return false; };
+  const nestedCarrier = el => { for (let q = el.parentElement; q; q = q.parentElement) if (isGeomCarrier(q)) return true; return false; };
+  const carriers = data._all.filter(el => (isGeomCarrier(el) && !nestedCarrier(el)) || (!isGeomCarrier(el) && (tagOf(el) === "PolyLine" || tagOf(el) === "Polyline") && el.parentElement && tagOf(el.parentElement) === "PipingNetworkSegment"));
+  for (const cl of carriers) {
+    if (inLineEl(cl)) continue;                          // 신호선 등 선 요소의 형상 제외
+    const lists = (isGeomCarrier(cl) ? pointLists(cl) : [kids(cl, "Coordinate").map(xyz).filter(Boolean)])
+      .map(l => l.map(XY).filter(Boolean)).filter(l => l.length);
+    if (!lists.length) continue;
     const owner = ancestor(cl, "PipingNetworkSegment");
-    if (owner && has(segLines, eidOf(owner))) { segLines[eidOf(owner)].push(pts); continue; }
+    if (owner && has(segLines, eidOf(owner))) { segLines[eidOf(owner)].push(...lists); continue; }
     outsideLines++;
     const ref = parentRef(cl);
-    if (has(segLines, ref)) segLines[ref].push(pts);
-    else if (has(pid2seg, ref)) segLines[pid2seg[ref]].push(pts);
+    if (has(segLines, ref)) segLines[ref].push(...lists);
+    else if (has(pid2seg, ref)) segLines[pid2seg[ref]].push(...lists);
     else {
       const sysEl = ancestor(cl, "PipingNetworkSystem");
-      const sref = has(data._sysSegs, ref) ? ref : (sysEl ? attr(sysEl, "ID") : null);
-      if (has(data._sysSegs, sref)) (sysLines[sref] = sysLines[sref] || []).push(pts); else unassignedLines++;
+      const sref = has(data._sysSegs, ref) ? ref : (sysEl ? eidOf(sysEl) : null);
+      if (has(data._sysSegs, sref)) (sysLines[sref] = sysLines[sref] || []).push(...lists); else unassignedLines++;
     }
   }
   const segComps = (segId, el) => Array.from(el.getElementsByTagName("*")).filter(c => tagOf(c) !== "PersistentID" && has(sym, eidOf(c)) && ancestor(c, "PipingNetworkSegment") === el && sym[eidOf(c)].parent_id === segId).map(c => eidOf(c));
@@ -443,9 +477,16 @@ function buildGraph(data, tol = null) {
     for (const [k, v] of Object.entries(info.attributes || {})) if (re.test(k) && v) return String(v && typeof v === "object" ? v.value : v).trim().toUpperCase();
     return null;
   };
+  const attrHandle = (info, side) => {
+    const re = new RegExp(`^connected[ _-]?handle[ _-]?${side}$`, "i");
+    for (const [k, v] of Object.entries(info.attributes || {})) if (re.test(k) && v != null && v !== "") return String(v && typeof v === "object" ? v.value : v).trim();
+    return null;
+  };
   const segs = {}, junctions = [];
   for (const [segId, el] of Object.entries(data._segEl)) {
-    const comps = segComps(segId, el), conn = connOf[segId] || {};
+    const comps = segComps(segId, el), conn = { ...(connOf[segId] || {}) }, info_ = segInfo[segId] || {};
+    if (!conn.from_id && attrHandle(info_, "from")) { conn.from_id = attrHandle(info_, "from"); conn.from_node = null; }   // Connection 없으면 connected_handle_from/to
+    if (!conn.to_id && attrHandle(info_, "to")) { conn.to_id = attrHandle(info_, "to"); conn.to_node = null; }
     const sH = symXY(has(pid2sym, conn.from_id) ? pid2sym[conn.from_id] : conn.from_id, conn.from_node);
     const eH = symXY(has(pid2sym, conn.to_id) ? pid2sym[conn.to_id] : conn.to_id, conn.to_node);
     let poly = chain(segLines[segId] || [], sH);
@@ -466,7 +507,7 @@ function buildGraph(data, tol = null) {
   const hintOk = (s, hint) => !hint ? true : hint === "TEE" ? isTeeSym(s) : hint.startsWith("NOZZ") ? s.type === "Nozzle" : hint.startsWith("VALV") ? /valve/i.test(s.component_class || "") : true;
   const snapSym = (xy, hint, exclude) => {
     let best = null;
-    for (const s of data.symbols) {
+    for (const s of symList) {
       if (exclude.has(s.id)) continue;
       const d = symDist(s, xy); if (d > snap) continue;
       const ext = s.extent || {}, key = [hintOk(s, hint) ? 0 : 1, d, (ext.width || 0) * (ext.height || 0)];
@@ -558,9 +599,20 @@ function buildGraph(data, tol = null) {
       for (let j = i + 1; j < clean.length; j++) if (clean[j][2]) { nxt = clean[j][2]; break; }
       if (prv && nxt && isBend(prv, e[2], nxt)) { e[0] = "node"; e[1] = tee(e[2], "bend"); }
     }
-    if (conn.flow_direction === "to->from") clean.reverse();
+    let flow = conn.flow_direction || null, flowSource = flow ? "connection" : null;
+    if (!flow && poly.length > 1) {
+      // 유동 방향 화살표(PipeFlowArrow): 화살표 Reference 방향과 경로 방향 비교
+      for (const a of data.symbols) {
+        if (a.type !== "PipeFlowArrow" || a.parent_id !== segId) continue;
+        const ref = XY((a.position || {}).reference), loc = XY((a.position || {}).location); if (!ref || !loc) continue;
+        let best = null;
+        for (let i = 0; i + 1 < poly.length; i++) { const dd = distPointSeg(loc, poly[i], poly[i + 1]); if (!best || dd < best[0]) best = [dd, [poly[i + 1][0] - poly[i][0], poly[i + 1][1] - poly[i][1]]]; }
+        if (best) { const dot = ref[0] * best[1][0] + ref[1] * best[1][1]; if (dot) { flow = dot > 0 ? "from->to" : "to->from"; flowSource = "arrow"; break; } }
+      }
+    }
+    if (flow === "to->from") clean.reverse();
     const base = { segment_id: info.id || segId, system_id: info.system_id ?? null, line_tag: info.tag_name ?? null,
-      virtual: !!info.virtual, flow: conn.flow_direction ?? null, drawing: dname, connection_inferred: sg.inferred.join(";") || null, ...flatProps(info.attributes, "attr_") };
+      virtual: !!info.virtual, flow, flow_source: flowSource, drawing: dname, nominal_diameter: (info.nominal_diameter || {}).value ?? null, connection_inferred: sg.inferred.join(";") || null, ...flatProps(info.attributes, "attr_") };
     let cur = null, geom = [], k = 0;
     for (const e of clean) {
       if (e[2]) geom.push(e[2]);

@@ -47,12 +47,19 @@ Windows에서 `python`이 안 되면 `py`를 쓰세요.
 - `SIGNAL` / `LINE` — 계기 신호선 등 선 요소 (자기 Connection, 없으면 끝점 좌표로 근처 심볼에 연결)
 - `LABEL_OF` — 텍스트 → 그 텍스트가 속한 심볼
 
+AVEVA P&ID 내보내기 구조 기준
+- 배관 형상: `PipingNetworkSegment` 안의 `<Component ComponentClass="CenterLine">` → `PolyLine` → `Coordinate+` (CenterLine 요소도 지원)
+- 연결: `Connection FromID/ToID`는 PersistentID 핸들. Connection이 없으면 GenericAttribute `connected_handle_from/to` 사용
+- `PipeConnectorSymbol`(시트 간 배관)은 노드로, `CrossPageConnection`의 DrawingName/LinkLabel과 in/out 방향을 속성으로
+- `SignalLine`은 `SIGNAL` 엣지, `PipeFlowArrow`/`InsulationSymbol`은 노드로 만들지 않음(화살표는 흐름 방향 판정에 사용), `PropertyBreak`는 노드
+- `Text`의 TextAngle을 회전으로, `NominalDiameter`를 구경 속성으로
+
 변환 규칙
 0. 요소 ID는 `ID` 속성, 없으면 PersistentID의 Identifier를 씁니다. Position 없이 자기 CenterLine을 가진 요소(신호선 등)는 심볼이 아니라 엣지로 봅니다. Extent가 위치와 동떨어져 있으면 심볼 로컬 좌표로 보고 위치·회전·배율·반전을 적용해 도면 좌표로 바꿉니다.
 1. 세그먼트의 CenterLine들을 좌표 기준으로 이어 하나의 경로로 만듭니다. 세그먼트 밖에 있는 CenterLine은 parent id(속성 또는 GenericAttribute, ID 또는 PersistentID)로 세그먼트를 찾아 붙입니다.
 2. 경로 위에 부품(밸브 등)과 분기 Tee를 위치(투영)로 끼워 넣습니다.
 3. 방향이 바뀌는 꼭짓점은 꺾임 Tee 노드가 됩니다. (일직선 위의 점은 노드가 되지 않음)
-4. 노드 사이 구간마다 PIPE 엣지 하나. 흐름 방향(FlowIn/FlowOut)이 반대면 엣지 방향을 뒤집습니다.
+4. 노드 사이 구간마다 PIPE 엣지 하나. 흐름 방향은 연결점의 FlowIn/FlowOut, 없으면 세그먼트 안 PipeFlowArrow의 방향으로 정하고(`flow_source`), 반대면 엣지 방향을 뒤집습니다.
 5. `VirtualPipeSeg`는 `virtual: true`인 엣지가 됩니다.
 6. ComponentClass에 Tee가 들어가거나 PdmsType이 `TEE`인 실제 부품은 `Tee` 노드(`tee_source: component`)가 됩니다.
 7. Connection이 없는 끝은 좌표로 근처 심볼(연결점/바운딩 박스) 또는 다른 파이프에 붙입니다. `connected_pdms_type_from/to`(TEE, NOZZ, VALV…)를 힌트로 우선 연결하며, 이렇게 붙인 엣지는 `connection_inferred`에 `start`/`end`로 표시됩니다.
@@ -61,7 +68,7 @@ Windows에서 `python`이 안 되면 `py`를 쓰세요.
 CenterLine 좌표는 꺾임 Tee · 부품 순서 · 분기 위치를 계산하는 재료로만 쓰고 결과에는 넣지 않습니다 (필요하면 `--geometry`).
 좌표 일치 허용 오차는 도면 대각선의 1/10000로 자동 결정되며(`--tol`로 지정 가능), 좌표 단위가 mm든 m든 동작합니다.
 
-예시: `examples/sample.xml` → `sample.json`, `sample.graph.json`
+예시: `examples/sample.xml`, `examples/aveva_like.xml`(AVEVA 내보내기 구조를 흉내 낸 도면) → `*.json`, `*.graph.json`
 
 ## 구조 파악 (`structure.py`)
 ```bash
