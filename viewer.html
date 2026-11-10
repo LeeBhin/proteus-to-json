@@ -47,6 +47,13 @@
   #file-name { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; }
   #tip { position: absolute; pointer-events: none; background: rgba(0,0,0,.8); padding: 4px 8px; border-radius: 6px; font-size: 12px; display: none; white-space: nowrap; }
   #err { color: #fca5a5; margin-top: 6px; }
+  .seg { display: flex; gap: 0; }
+  .seg > button:not(.ghost) { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 0; padding: 6px 14px; }
+  .seg > button:not(.ghost):first-child { border-radius: 8px 0 0 8px; }
+  .seg > button:not(.ghost):nth-child(2) { border-radius: 0 8px 8px 0; border-left: 0; }
+  .seg > button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #glegend { display: flex; flex-wrap: wrap; gap: 5px; }
+  #glegend span { border-radius: 999px; padding: 2px 9px; font-size: 11px; color: #111; font-weight: 600; }
   @media (max-width: 800px) { #app { grid-template-columns: 1fr; grid-template-rows: 60% 40%; } aside { border-left: 0; border-top: 1px solid var(--line); } }
 </style>
 </head>
@@ -75,6 +82,11 @@
         </div>
       </div>
       <div id="file-name">파일 없음</div>
+      <div class="seg" style="margin-top:10px">
+        <button id="m-drawing" class="active">도면</button>
+        <button id="m-graph">그래프</button>
+        <button class="ghost" id="relayout" style="display:none;margin-left:auto">재배치</button>
+      </div>
     </section>
     <section>
       <h3>요약</h3>
@@ -96,7 +108,8 @@
         <label class="chk"><input type="checkbox" id="o-arrow" checked>흐름</label>
         <label class="chk"><input type="checkbox" id="o-color" checked>라인별 색</label>
       </div>
-      <div class="legend" style="margin-top:8px">
+      <div id="glegend" style="margin-top:8px;display:none"></div>
+      <div class="legend" id="dlegend" style="margin-top:8px">
         <span><i style="background:var(--equip)"></i>기기</span>
         <span><i style="background:var(--valve)"></i>배관 부품</span>
         <span><i style="background:var(--nozzle)"></i>노즐</span>
@@ -409,7 +422,7 @@ function buildGraph(data, tol = 0.5) {
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d"), tip = $("tip");
 let G = null, nodeById = new Map(), bounds = null;
-let view = { s: 1, tx: 0, ty: 0 }, sel = null, hover = null, fileStem = "graph";
+let mode = "drawing", views = { drawing: { s: 1, tx: 0, ty: 0 }, graph: { s: 1, tx: 0, ty: 0 } }, view = views.drawing, sel = null, hover = null, fileStem = "graph";
 const opt = () => ({ bend: $("o-bend").checked, label: $("o-label").checked, virtual: $("o-virtual").checked, arrow: $("o-arrow").checked, color: $("o-color").checked });
 
 let lineColors = new Map();
@@ -457,7 +470,7 @@ function computeBounds() {
 }
 function fit() {
   if (!G) return;
-  const r = cv.getBoundingClientRect(), b = bounds, pad = 40;
+  const r = cv.getBoundingClientRect(), b = mode === "graph" ? graphBounds() : bounds, pad = 40;
   const w = Math.max(b.x1 - b.x0, 1), h = Math.max(b.y1 - b.y0, 1);
   view.s = Math.min((r.width - pad * 2) / w, (r.height - pad * 2) / h);
   view.tx = (r.width - w * view.s) / 2 - b.x0 * view.s;
@@ -475,6 +488,7 @@ function draw() {
   const r = cv.getBoundingClientRect();
   ctx.clearRect(0, 0, r.width, r.height);
   if (!G) return;
+  if (mode === "graph") return drawGraph();
   const o = opt();
   const hiSeg = sel && sel.type === "edge" ? sel.item.segment_id : null;
   const hiLine = sel && sel.type === "edge" ? (sel.item.attr_LineNumber || sel.item.system_id) : null;
@@ -550,6 +564,7 @@ function drawArrow(e) {
 
 function hitTest(sx, sy) {
   if (!G) return null;
+  if (mode === "graph") return hitTestGraph(sx, sy);
   const o = opt(); let best = null, bestArea = Infinity;
   for (const n of G.nodes) {
     if (n.x == null) continue; const st = nodeStyle(n); if (st.bend && !o.bend) continue;
@@ -573,6 +588,224 @@ function hitTest(sx, sy) {
     }
   }
   return eb || best;
+}
+
+
+/* ============================ 그래프 모드 (Neo4j 스타일) ============================ */
+let GD = null, simAlpha = 0, simRAF = null;
+const PALETTE = ["#F79767", "#57C7E3", "#F16667", "#D9C8AE", "#8DCC93", "#ECB5C9", "#4C8EDA", "#FFC454", "#DA7194", "#569480", "#C990C0", "#A5ABB6"];
+let labelColors = new Map();
+function labelColor(n) {
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? "#ff9f43" : "#8b93a7";
+  if (n.label === "PipeEnd") return "#ef4444";
+  if (!labelColors.has(n.label)) labelColors.set(n.label, PALETTE[labelColors.size % PALETTE.length]);
+  return labelColors.get(n.label);
+}
+function nodeRadius(n) {
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? 9 : 6;
+  if (n.label === "PipeEnd") return 10;
+  if (n.kind === "Equipment") return 28;
+  if (n.kind === "Nozzle") return 12;
+  return 19;
+}
+function posOf(n) {
+  if (mode === "graph") { const d = GD && GD.byId.get(n.id); return d ? [d.x, d.y] : null; }
+  return n.x != null ? [n.x, n.y] : null;
+}
+// 표시용 그래프: 꺾임 Tee를 숨기면 (입1·출1인) 꺾임 Tee를 건너뛰어 엣지 하나로 합침
+function buildDisplay() {
+  const o = opt();
+  const pipes = G.edges.filter(e => e.type === "PIPE" && (o.virtual || !e.virtual));
+  const outs = new Map(), ins = new Map();
+  for (const e of pipes) { if (!outs.has(e.from)) outs.set(e.from, []); outs.get(e.from).push(e); if (!ins.has(e.to)) ins.set(e.to, []); ins.get(e.to).push(e); }
+  const isC = id => { if (o.bend) return false; const n = nodeById.get(id); return !!n && n.label === "Tee" && n.tee_kinds === "bend" && (outs.get(id) || []).length === 1 && (ins.get(id) || []).length === 1; };
+  const links = [];
+  for (const e of pipes) {
+    if (isC(e.from)) continue;
+    let cur = e, chain = [e];
+    while (isC(cur.to) && chain.length < 100000) { cur = outs.get(cur.to)[0]; chain.push(cur); }
+    links.push(chain.length === 1 ? e : { ...e, id: chain.map(c => c.id).join("+"), to: cur.to, bends_merged: chain.length - 1,
+      length: +chain.reduce((a, c) => a + (c.length || 0), 0).toFixed(3), merged_edges: chain.map(c => c.id) });
+  }
+  for (const e of G.edges) if (e.type === "PART_OF") links.push(e);
+  const keep = G.nodes.filter(n => !isC(n.id));
+  // 초기 위치: 도면 좌표를 엣지 길이 ~90이 되도록 스케일
+  const ds = links.filter(l => l.type === "PIPE").map(l => { const a = nodeById.get(l.from), b = nodeById.get(l.to); return a && b && a.x != null && b.x != null ? Math.hypot(a.x - b.x, a.y - b.y) : 0; }).filter(d => d > 0).sort((a, b) => a - b);
+  const scale = ds.length ? 90 / ds[Math.floor(ds.length / 2)] : 1;
+  const prev = GD ? GD.byId : new Map();
+  const nodes = keep.map(n => {
+    const p = prev.get(n.id);
+    if (p) return p;
+    const x = n.x != null ? n.x * scale : (Math.random() - 0.5) * 200, y = n.y != null ? n.y * scale : (Math.random() - 0.5) * 200;
+    return { id: n.id, n, x, y, vx: 0, vy: 0, r: nodeRadius(n), fx: null, fy: null };
+  });
+  const byId = new Map(nodes.map(d => [d.id, d]));
+  const deg = new Map();
+  const L = links.filter(l => byId.has(l.from) && byId.has(l.to)).map(l => {
+    deg.set(l.from, (deg.get(l.from) || 0) + 1); deg.set(l.to, (deg.get(l.to) || 0) + 1);
+    return { e: l, s: byId.get(l.from), t: byId.get(l.to) };
+  });
+  const pairs = new Map();
+  for (const l of L) {
+    l.k = 0.7 / Math.min(deg.get(l.s.id), deg.get(l.t.id)); l.len = l.e.type === "PART_OF" ? l.s.r + l.t.r + 18 : l.s.r + l.t.r + 70;
+    const key = [l.s.id, l.t.id].sort().join("|"); if (!pairs.has(key)) pairs.set(key, []); pairs.get(key).push(l);
+  }
+  // 같은 두 노드 사이 엣지가 여러 개면 곡선으로 벌려 그림
+  for (const g of pairs.values()) g.forEach((l, i) => { const sign = l.s.id < l.t.id ? 1 : -1; l.bend = g.length > 1 ? (i - (g.length - 1) / 2) * 34 * sign : 0; });
+  GD = { nodes, byId, links: L };
+  simAlpha = Math.max(simAlpha, 0.6);
+}
+function tick() {
+  const N = GD.nodes, a = simAlpha;
+  for (const l of GD.links) {
+    const s = l.s, t = l.t;
+    let dx = t.x + t.vx - s.x - s.vx, dy = t.y + t.vy - s.y - s.vy, d = Math.hypot(dx, dy) || 1e-6;
+    const k = (d - l.len) / d * a * l.k; dx *= k; dy *= k;
+    t.vx -= dx * 0.5; t.vy -= dy * 0.5; s.vx += dx * 0.5; s.vy += dy * 0.5;
+  }
+  const C = 180, grid = new Map();
+  for (const n of N) { const key = Math.floor(n.x / C) + "," + Math.floor(n.y / C); if (!grid.has(key)) grid.set(key, []); grid.get(key).push(n); }
+  for (const n of N) {
+    const gx = Math.floor(n.x / C), gy = Math.floor(n.y / C);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const cell = grid.get((gx + i) + "," + (gy + j)); if (!cell) continue;
+      for (const m of cell) {
+        if (m === n) continue;
+        let dx = n.x - m.x, dy = n.y - m.y, d2 = dx * dx + dy * dy;
+        if (d2 > C * C) continue;
+        if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
+        const f = 1400 * a / d2; n.vx += dx * f; n.vy += dy * f;
+        const d = Math.sqrt(d2), minD = n.r + m.r + 10;
+        if (d < minD) { const p = (minD - d) / d * 0.35; n.vx += dx * p; n.vy += dy * p; }
+      }
+    }
+  }
+  for (const n of N) {
+    if (n.fx != null) { n.x = n.fx; n.y = n.fy; n.vx = n.vy = 0; continue; }
+    n.vx *= 0.55; n.vy *= 0.55; n.x += n.vx; n.y += n.vy;
+  }
+  simAlpha += (0 - simAlpha) * 0.02;
+}
+function runSim() {
+  if (simRAF || !GD) return;
+  const step = () => {
+    const t0 = performance.now();
+    do tick(); while (performance.now() - t0 < 14 && simAlpha > 0.004);
+    if (mode === "graph") draw();
+    simRAF = simAlpha > 0.004 ? requestAnimationFrame(step) : null;
+  };
+  simRAF = requestAnimationFrame(step);
+}
+function graphBounds() {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const n of GD.nodes) { x0 = Math.min(x0, n.x - n.r); y0 = Math.min(y0, n.y - n.r); x1 = Math.max(x1, n.x + n.r); y1 = Math.max(y1, n.y + n.r); }
+  return isFinite(x0) ? { x0, y0, x1, y1 } : { x0: 0, y0: 0, x1: 100, y1: 100 };
+}
+// 엣지의 화면 경로: 직선 또는 2차 베지어 (시작/끝은 원 둘레에서 자름)
+function linkPath(l) {
+  const [ax, ay] = W2S(l.s.x, l.s.y), [bx, by] = W2S(l.t.x, l.t.y);
+  const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy); if (d < 1) return null;
+  const nx = -dy / d, ny = dx / d, off = (l.bend || 0) * Math.min(1, view.s * 1.5 + 0.3);
+  const cx = (ax + bx) / 2 + nx * off * 2, cy = (ay + by) / 2 + ny * off * 2;
+  const rs = l.s.r * view.s, rt = l.t.r * view.s + 2;
+  if (d <= rs + rt) return null;
+  const v0 = [cx - ax, cy - ay], v1 = [bx - cx, by - cy], n0 = Math.hypot(...v0) || 1, n1 = Math.hypot(...v1) || 1;
+  const p0 = [ax + v0[0] / n0 * rs, ay + v0[1] / n0 * rs], p1 = [bx - v1[0] / n1 * rt, by - v1[1] / n1 * rt];
+  return { p0, p1, c: [cx, cy], ux: v1[0] / n1, uy: v1[1] / n1, curved: !!off,
+    mid: [(p0[0] + 2 * cx + p1[0]) / 4, (p0[1] + 2 * cy + p1[1]) / 4], len: d - rs - rt, ang: Math.atan2(dy, dx) };
+}
+function drawGraph() {
+  const o = opt();
+  const hiSeg = sel && sel.type === "edge" ? sel.item.segment_id : null;
+  const hiLine = sel && sel.type === "edge" ? (sel.item.attr_LineNumber || sel.item.system_id) : null;
+  let hiNodes = null;
+  if (sel && sel.type === "node") { hiNodes = new Set([sel.item.id]); for (const l of GD.links) { if (l.s.id === sel.item.id) hiNodes.add(l.t.id); if (l.t.id === sel.item.id) hiNodes.add(l.s.id); } }
+  const dim = !!sel;
+  ctx.font = "10px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
+  for (const l of GD.links) {
+    const e = l.e, P = linkPath(l); if (!P) continue;
+    const isPipe = e.type === "PIPE", lineKey = e.attr_LineNumber || e.system_id;
+    const on = !dim || (isPipe && hiSeg && (e.segment_id === hiSeg || (hiLine && lineKey === hiLine))) || (hiNodes && (l.s.id === sel.item.id || l.t.id === sel.item.id));
+    const isSel = sel && sel.type === "edge" && (sel.item === e || sel.item.id === e.id);
+    ctx.globalAlpha = on ? 1 : 0.12;
+    ctx.strokeStyle = isSel ? "#ffffff" : !isPipe ? "#6b7280" : (o.color ? lineColor(lineKey) : "#a5abb6");
+    ctx.lineWidth = isSel ? 3 : (e === hover ? 2.6 : 1.6);
+    ctx.setLineDash(e.virtual ? [5, 4] : !isPipe ? [2, 3] : []);
+    ctx.beginPath(); ctx.moveTo(...P.p0);
+    if (P.curved) ctx.quadraticCurveTo(P.c[0], P.c[1], P.p1[0], P.p1[1]); else ctx.lineTo(...P.p1);
+    ctx.stroke(); ctx.setLineDash([]);
+    if (o.arrow && isPipe) {
+      const s = 7, [x1, y1] = P.p1, ux = P.ux, uy = P.uy; ctx.fillStyle = ctx.strokeStyle; ctx.beginPath();
+      ctx.moveTo(x1 + ux * 2, y1 + uy * 2); ctx.lineTo(x1 - ux * s - uy * s * 0.55, y1 - uy * s + ux * s * 0.55); ctx.lineTo(x1 - ux * s + uy * s * 0.55, y1 - uy * s - ux * s * 0.55); ctx.closePath(); ctx.fill();
+    }
+    if (o.label && P.len > 90) {
+      const txt = isPipe ? (e.attr_LineNumber || e.line_tag || "PIPE") + (e.virtual ? " (가상)" : "") + (e.bends_merged ? ` (꺾임 ${e.bends_merged})` : "") : "PART_OF";
+      let ang = P.ang; if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      ctx.save(); ctx.translate(P.mid[0], P.mid[1]); ctx.rotate(ang);
+      ctx.font = "10px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
+      const w = ctx.measureText(txt).width + 8;
+      ctx.fillStyle = "#0f1115"; ctx.fillRect(-w / 2, -7, w, 14);
+      ctx.fillStyle = on ? "#c9cfdb" : "#555"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, 0, 0);
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+  for (const d of GD.nodes) {
+    const n = d.n, [x, y] = W2S(d.x, d.y), r = d.r * view.s;
+    const on = !dim || (hiNodes && hiNodes.has(n.id)) || (sel && sel.type === "edge" && (sel.item.from === n.id || sel.item.to === n.id));
+    const isSel = sel && sel.type === "node" && sel.item === n;
+    ctx.globalAlpha = on ? 1 : 0.18;
+    const c = labelColor(n);
+    if (isSel || n === hover) { ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.fillStyle = isSel ? "#ffffff88" : "#ffffff33"; ctx.fill(); }
+    ctx.beginPath(); ctx.arc(x, y, Math.max(r, 2), 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = "#00000055"; ctx.stroke();
+    if (o.label && n.label !== "Tee" && r >= 11) {
+      let txt = n.tag || n.label;
+      const fs = Math.min(12, Math.max(8, r * 0.42));
+      ctx.font = `${fs}px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif`;
+      while (txt.length > 2 && ctx.measureText(txt).width > r * 1.75) txt = txt.slice(0, -2) + "…";
+      ctx.fillStyle = "#111"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+      ctx.textBaseline = "alphabetic";
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+function hitTestGraph(sx, sy) {
+  if (!GD) return null;
+  let best = null, bd = Infinity;
+  for (const d of GD.nodes) {
+    const [x, y] = W2S(d.x, d.y), dist = Math.hypot(sx - x, sy - y);
+    if (dist <= Math.max(d.r * view.s, 4) + 3 && dist < bd) { bd = dist; best = { type: "node", item: d.n }; }
+  }
+  if (best) return best;
+  let eb = null, ed = 6;
+  for (const l of GD.links) {
+    const P = linkPath(l); if (!P) continue;
+    let prev = P.p0;
+    for (let i = 1; i <= 12; i++) {   // 곡선은 점으로 근사
+      const t = i / 12, q = P.curved ? [(1 - t) ** 2 * P.p0[0] + 2 * (1 - t) * t * P.c[0] + t * t * P.p1[0], (1 - t) ** 2 * P.p0[1] + 2 * (1 - t) * t * P.c[1] + t * t * P.p1[1]] : [P.p0[0] + (P.p1[0] - P.p0[0]) * t, P.p0[1] + (P.p1[1] - P.p0[1]) * t];
+      const d = distPointSeg([sx, sy], prev, q); if (d < ed) { ed = d; eb = { type: "edge", item: l.e }; }
+      prev = q;
+    }
+  }
+  return eb;
+}
+function updateLegend() {
+  const g = mode === "graph";
+  $("glegend").style.display = g ? "flex" : "none"; $("dlegend").style.display = g ? "none" : "grid";
+  if (!g || !GD) return;
+  const cnt = new Map();
+  for (const d of GD.nodes) { const k = d.n.label === "Tee" ? (d.n.tee_kinds.includes("branch") ? "Tee (분기)" : "Tee (꺾임)") : d.n.label; cnt.set(k, [(cnt.get(k) || [0])[0] + 1, labelColor(d.n)]); }
+  $("glegend").innerHTML = [...cnt].sort((a, b) => b[1][0] - a[1][0]).map(([k, [c, col]]) => `<span style="background:${col}">${esc(k)} (${c})</span>`).join("")
+    + `<span style="background:#a5abb6">PIPE (${GD.links.filter(l => l.e.type === "PIPE").length})</span>`;
+}
+function setMode(m) {
+  mode = m; view = views[m];
+  $("m-drawing").classList.toggle("active", m === "drawing"); $("m-graph").classList.toggle("active", m === "graph");
+  $("relayout").style.display = m === "graph" ? "" : "none";
+  if (G && m === "graph" && !GD) { buildDisplay(); runSim(); }
+  updateLegend(); hover = null;
+  if (G && !view.fitted) { view.fitted = true; fit(); } else draw();
 }
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -602,18 +835,31 @@ function showDetail() {
 function selectNode(id, center) {
   const n = nodeById.get(id); if (!n) return;
   sel = { type: "node", item: n };
-  if (center && n.x != null) { const r = cv.getBoundingClientRect(); view.tx = r.width / 2 - n.x * view.s; view.ty = r.height / 2 + n.y * view.s; }
+  const p = posOf(n);
+  if (center && p) { const r = cv.getBoundingClientRect(); view.tx = r.width / 2 - p[0] * view.s; view.ty = r.height / 2 + p[1] * view.s; }
   showDetail(); draw();
 }
 
 // 입력
 let drag = null, moved = false;
-cv.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty }; moved = false; cv.setPointerCapture(e.pointerId); cv.classList.add("dragging"); });
+cv.addEventListener("pointerdown", e => {
+  drag = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty }; moved = false;
+  if (mode === "graph" && GD) {
+    const r = cv.getBoundingClientRect(), h = hitTestGraph(e.clientX - r.left, e.clientY - r.top);
+    if (h && h.type === "node") drag.node = GD.byId.get(h.item.id);
+  }
+  cv.setPointerCapture(e.pointerId); cv.classList.add("dragging");
+});
 cv.addEventListener("pointermove", e => {
   const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
   if (drag) {
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+    if (drag.node) {
+      if (!moved) return;
+      const [wx, wy] = S2W(sx, sy); drag.node.fx = wx; drag.node.fy = wy; drag.node.x = wx; drag.node.y = wy;
+      simAlpha = Math.max(simAlpha, 0.25); runSim(); draw(); return;
+    }
     view.tx = drag.tx + dx; view.ty = drag.ty + dy; draw(); return;
   }
   const h = hitTest(sx, sy), item = h ? h.item : null;
@@ -635,7 +881,11 @@ cv.addEventListener("wheel", e => {
   view.s *= f; view.tx = sx - wx * view.s; view.ty = sy + wy * view.s; draw();
 }, { passive: false });
 window.addEventListener("resize", resize);
-["o-bend", "o-label", "o-virtual", "o-arrow", "o-color"].forEach(id => $(id).onchange = draw);
+["o-label", "o-arrow", "o-color"].forEach(id => $(id).onchange = draw);
+["o-bend", "o-virtual"].forEach(id => $(id).onchange = () => { if (mode === "graph" && G) { buildDisplay(); runSim(); updateLegend(); } draw(); });
+$("m-drawing").onclick = () => setMode("drawing");
+$("m-graph").onclick = () => setMode("graph");
+$("relayout").onclick = () => { if (G) { GD = null; buildDisplay(); runSim(); fit(); } };
 $("fit").onclick = fit;
 $("open").onclick = $("pick").onclick = () => $("file").click();
 $("file").onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
@@ -665,6 +915,9 @@ function loadFile(file) {
       fileStem = file.name.replace(/\.[^.]+$/, "");
       nodeById = new Map(G.nodes.map(n => [n.id, n]));
       bounds = computeBounds(); sel = null; hover = null; lineColors = new Map();
+      GD = null; views.drawing.fitted = views.graph.fitted = false;
+      if (mode === "graph") { buildDisplay(); runSim(); }
+      updateLegend(); view.fitted = true;
       const pe2 = G.edges.filter(e => e.type === "PIPE");
       $("s-nodes").textContent = G.summary.nodes;
       $("s-edges").textContent = G.summary.pipe_edges;
