@@ -5,6 +5,11 @@
     "edges": 15,
     "pipe_edges": 12,
     "tees": 7,
+    "bend_tees": 6,
+    "branch_tees": 1,
+    "centerline_points": 13,
+    "segments_without_centerline": 1,
+    "tol": 0.1029619832753818,
     "pipe_ends": 0
   },
   "nodes": [
@@ -276,13 +281,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 38.0,
-      "geometry": [
-        112.0,
-        200.0,
-        150.0,
-        200.0
-      ]
+      "length": 38.0
     },
     {
       "id": "P-001:SEG-1#1",
@@ -298,15 +297,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 50.0,
-      "geometry": [
-        150.0,
-        200.0,
-        195.0,
-        200.0,
-        200.0,
-        200.0
-      ]
+      "length": 50.0
     },
     {
       "id": "P-001:SEG-1#2",
@@ -322,15 +313,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 50.0,
-      "geometry": [
-        200.0,
-        200.0,
-        205.0,
-        200.0,
-        250.0,
-        200.0
-      ]
+      "length": 50.0
     },
     {
       "id": "P-001:SEG-1#3",
@@ -346,13 +329,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 30.0,
-      "geometry": [
-        250.0,
-        200.0,
-        250.0,
-        230.0
-      ]
+      "length": 30.0
     },
     {
       "id": "P-001:SEG-1#4",
@@ -368,13 +345,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 30.0,
-      "geometry": [
-        250.0,
-        230.0,
-        280.0,
-        230.0
-      ]
+      "length": 30.0
     },
     {
       "id": "P-001:SEG-1#5",
@@ -390,13 +361,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 30.0,
-      "geometry": [
-        280.0,
-        230.0,
-        280.0,
-        200.0
-      ]
+      "length": 30.0
     },
     {
       "id": "P-001:SEG-1#6",
@@ -412,13 +377,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 18.0,
-      "geometry": [
-        280.0,
-        200.0,
-        298.0,
-        200.0
-      ]
+      "length": 18.0
     },
     {
       "id": "P-001:SEG-2#0",
@@ -434,13 +393,7 @@
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
-      "length": 93.0,
-      "geometry": [
-        205.0,
-        200.0,
-        298.0,
-        200.0
-      ]
+      "length": 93.0
     },
     {
       "id": "P-001:SEG-3#0",
@@ -455,13 +408,7 @@
       "drawing": "P-001",
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
-      "length": 50.0,
-      "geometry": [
-        150.0,
-        200.0,
-        150.0,
-        150.0
-      ]
+      "length": 50.0
     },
     {
       "id": "P-001:SEG-3#1",
@@ -476,13 +423,7 @@
       "drawing": "P-001",
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
-      "length": 80.0,
-      "geometry": [
-        150.0,
-        150.0,
-        230.0,
-        150.0
-      ]
+      "length": 80.0
     },
     {
       "id": "P-001:SEG-3#2",
@@ -497,13 +438,7 @@
       "drawing": "P-001",
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
-      "length": 20.0,
-      "geometry": [
-        230.0,
-        150.0,
-        230.0,
-        130.0
-      ]
+      "length": 20.0
     },
     {
       "id": "P-001:SEG-3#3",
@@ -518,13 +453,7 @@
       "drawing": "P-001",
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
-      "length": 18.0,
-      "geometry": [
-        230.0,
-        130.0,
-        230.0,
-        112.0
-      ]
+      "length": 18.0
     }
   ]
 }

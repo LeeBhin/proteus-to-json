@@ -93,7 +93,7 @@
       <div class="stats">
         <div class="stat"><b id="s-nodes">0</b><span>노드</span></div>
         <div class="stat"><b id="s-edges">0</b><span>파이프 엣지</span></div>
-        <div class="stat"><b id="s-tees">0</b><span>Tee</span></div>
+        <div class="stat"><b id="s-tees">0</b><span>Tee (꺾임/분기)</span></div>
         <div class="stat"><b id="s-lines">0</b><span>라인</span></div>
         <div class="stat"><b id="s-virtual">0</b><span>가상 엣지</span></div>
         <div class="stat"><b id="s-ends">0</b><span>미연결 끝</span></div>
@@ -114,7 +114,7 @@
         <span><i style="background:var(--valve)"></i>배관 부품</span>
         <span><i style="background:var(--nozzle)"></i>노즐</span>
         <span><i style="background:var(--branch);border-radius:50%"></i>분기 Tee</span>
-        <span><i style="background:var(--bend);border-radius:50%"></i>꺾임 Tee</span>
+        <span><i style="background:#cbd5e1;border-radius:50%"></i>꺾임 Tee</span>
         <span><i style="background:var(--end)"></i>미연결 끝</span>
         <span style="grid-column:1/-1"><i style="border:1px dashed var(--muted)"></i>점선 사각형 = XML에 크기(Extent) 없음</span>
       </div>
@@ -166,7 +166,8 @@ function parseExtent(el) {
   const e = kid(el, "Extent"); if (!e) return null;
   const mn = xyz(kid(e, "Min")), mx = xyz(kid(e, "Max"));
   if (!mn || !mx || typeof mn.x !== "number" || typeof mx.x !== "number") return { min: mn, max: mx };
-  return { min: mn, max: mx, width: mx.x - mn.x, height: mx.y - mn.y, center: { x: (mn.x + mx.x) / 2, y: (mn.y + mx.y) / 2 } };
+  const r6 = v => Math.round(v * 1e6) / 1e6;
+  return { min: mn, max: mx, width: r6(mx.x - mn.x), height: r6(mx.y - mn.y), center: { x: r6((mn.x + mx.x) / 2), y: r6((mn.y + mx.y) / 2) } };
 }
 function parsePosition(el) {
   const p = kid(el, "Position"); if (!p) return null;
@@ -206,6 +207,16 @@ function parseCP(el) {
 }
 const isVirtual = it => /virtual/i.test(((it.persistent_id || {}).identifier || "") + " " + (it.component_class || ""));
 
+function coordDiag(all) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const e of all) {
+    const t = tagOf(e); if (t !== "Coordinate" && t !== "Location") continue;
+    const x = num(attr(e, "X")), y = num(attr(e, "Y"));
+    if (typeof x !== "number" || typeof y !== "number") continue;
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  return isFinite(x0) ? Math.hypot(x1 - x0, y1 - y0) : 1000;
+}
 function parseProteus(doc, fileName) {
   const root = doc.documentElement;
   const all = Array.from(root.getElementsByTagName("*"));
@@ -243,7 +254,7 @@ function parseProteus(doc, fileName) {
     source_file: fileName,
     plant_information: info ? Object.fromEntries(Array.from(info.attributes).map(a => [a.localName || a.name, a.value])) : null,
     drawing: drawing ? { name: attr(drawing, "Name"), extent: parseExtent(drawing) } : null,
-    symbols, pipes, connections, _segEl: segEl, _sysSegs: sysSegs,
+    symbols, pipes, connections, _segEl: segEl, _sysSegs: sysSegs, _diag: coordDiag(all),
   };
 }
 
@@ -271,7 +282,13 @@ function isBend(prv, cur, nxt, eps = 1e-3) {
 }
 const fmtNum = v => String(+v.toFixed(6)).replace(/\.0+$/, "");
 
-function buildGraph(data, tol = 0.5) {
+// CenterLine 좌표는 꺾임 Tee / 부품 순서 / 분기 위치 계산에만 쓰고 결과에는 넣지 않음
+function buildGraph(data, tol = null) {
+  if (!tol) {
+    const ext = (data.drawing && data.drawing.extent) || {};
+    const diag = ext.width && ext.height ? Math.hypot(ext.width, ext.height) : data._diag;
+    tol = diag > 0 ? diag * 1e-4 : 0.1;
+  }
   const dname = (data.drawing && data.drawing.name) || data.source_file.replace(/\.[^.]+$/, "");
   const nid = raw => `${dname}:${raw}`;
   const nodes = new Map(), edges = [];
@@ -407,15 +424,19 @@ function buildGraph(data, tol = 0.5) {
       if (e[0] !== "node") continue;
       if (cur !== null && cur !== e[1]) {
         let length = 0; for (let i = 1; i < geom.length; i++) length += hyp(geom[i - 1], geom[i]);
-        edges.push({ id: `${nid(segId)}#${k++}`, type: "PIPE", from: cur, to: e[1], ...base, length: +length.toFixed(3),
-          geometry: geom.flatMap(p => [+p[0].toFixed(3), +p[1].toFixed(3)]) });
+        edges.push({ id: `${nid(segId)}#${k++}`, type: "PIPE", from: cur, to: e[1], ...base, length: +length.toFixed(3) });
       }
       cur = e[1]; geom = e[2] ? [e[2]] : [];
     }
   }
   const nl = [...nodes.values()];
   return { drawing: dname, summary: { nodes: nl.length, edges: edges.length, pipe_edges: edges.filter(e => e.type === "PIPE").length,
-    tees: nl.filter(n => n.label === "Tee").length, pipe_ends: nl.filter(n => n.label === "PipeEnd").length }, nodes: nl, edges };
+    tees: nl.filter(n => n.label === "Tee").length,
+    bend_tees: nl.filter(n => n.label === "Tee" && n.tee_kinds.includes("bend")).length,
+    branch_tees: nl.filter(n => n.label === "Tee" && n.tee_kinds.includes("branch")).length,
+    pipe_ends: nl.filter(n => n.label === "PipeEnd").length,
+    centerline_points: Object.values(segs).reduce((a, s) => a + s.poly.length, 0),
+    segments_without_centerline: Object.values(segs).filter(s => !s.poly.length).length, tol }, nodes: nl, edges };
 }
 
 /* ============================== 뷰어 ============================== */
@@ -432,7 +453,7 @@ function lineColor(key) {
   return lineColors.get(key);
 }
 function nodeStyle(n) {
-  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: "#ff9f43", tee: true, r: 4.5 } : { c: "#6b7280", tee: true, r: 2.5, bend: true };
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: "#ff9f43", tee: true, r: 5 } : { c: "#cbd5e1", tee: true, r: 3.5, bend: true };
   if (n.label === "PipeEnd") return { c: "#ef4444" };
   if (n.kind === "Equipment") return { c: "#22c55e" };
   if (n.kind === "Nozzle") return { c: "#a78bfa" };
@@ -464,7 +485,6 @@ function computeBounds() {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (x, y) => { if (x == null || y == null) return; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
   for (const n of G.nodes) { add(n.x, n.y); if (hasBox(n)) { add(n.min_x, n.min_y); add(n.max_x, n.max_y); } }
-  for (const e of G.edges) if (e.geometry) for (let i = 0; i < e.geometry.length; i += 2) add(e.geometry[i], e.geometry[i + 1]);
   if (!isFinite(x0)) { x0 = 0; y0 = 0; x1 = 100; y1 = 100; }
   return { x0, y0, x1, y1 };
 }
@@ -497,8 +517,10 @@ function draw() {
 
   // 엣지
   for (const e of G.edges) {
-    if (e.type !== "PIPE" || !e.geometry || e.geometry.length < 4) continue;
+    if (e.type !== "PIPE") continue;
     if (e.virtual && !o.virtual) continue;
+    const A = nodeById.get(e.from), B = nodeById.get(e.to);
+    if (!A || !B || A.x == null || B.x == null) continue;
     const lineKey = e.attr_LineNumber || e.system_id;
     let on = !dim || (hiSeg && (e.segment_id === hiSeg || (hiLine && lineKey === hiLine))) || (hiNodes && hiNodes.has(e.from) && hiNodes.has(e.to) && (e.from === sel.item.id || e.to === sel.item.id));
     const isSel = sel && sel.type === "edge" && sel.item === e;
@@ -506,10 +528,9 @@ function draw() {
     ctx.globalAlpha = on ? 1 : 0.15;
     ctx.lineWidth = isSel ? 3.5 : (e === hover ? 3 : 2);
     ctx.setLineDash(e.virtual ? [5, 4] : []);
-    ctx.beginPath();
-    for (let i = 0; i < e.geometry.length; i += 2) { const [sx, sy] = W2S(e.geometry[i], e.geometry[i + 1]); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }
-    ctx.stroke();
-    if (o.arrow && e.flow) drawArrow(e);
+    const [ax, ay] = W2S(A.x, A.y), [bx, by] = W2S(B.x, B.y);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    if (o.arrow && e.flow) drawArrow(ax, ay, bx, by);
   }
   ctx.setLineDash([]); ctx.globalAlpha = 1;
   // PART_OF
@@ -545,23 +566,15 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 }
-function drawArrow(e) {
-  const g = e.geometry; let total = 0; const segL = [];
-  for (let i = 2; i < g.length; i += 2) { const l = Math.hypot(g[i] - g[i - 2], g[i + 1] - g[i - 1]); segL.push(l); total += l; }
-  if (total * view.s < 24) return;
-  let half = total / 2, i = 0;
-  while (i < segL.length && half > segL[i]) { half -= segL[i]; i++; }
-  if (i >= segL.length) return;
-  const ax = g[i * 2], ay = g[i * 2 + 1], bx = g[i * 2 + 2], by = g[i * 2 + 3], t = segL[i] ? half / segL[i] : 0;
-  const [sx, sy] = W2S(ax + (bx - ax) * t, ay + (by - ay) * t);
-  const ang = Math.atan2(-(by - ay), bx - ax), s = 6;
+function drawArrow(ax, ay, bx, by) {
+  const d = Math.hypot(bx - ax, by - ay); if (d < 24) return;
+  const sx = (ax + bx) / 2, sy = (ay + by) / 2, ang = Math.atan2(by - ay, bx - ax), s = 6;
   ctx.fillStyle = ctx.strokeStyle; ctx.beginPath();
   ctx.moveTo(sx + Math.cos(ang) * s, sy + Math.sin(ang) * s);
   ctx.lineTo(sx + Math.cos(ang + 2.5) * s, sy + Math.sin(ang + 2.5) * s);
   ctx.lineTo(sx + Math.cos(ang - 2.5) * s, sy + Math.sin(ang - 2.5) * s);
   ctx.closePath(); ctx.fill();
 }
-
 function hitTest(sx, sy) {
   if (!G) return null;
   if (mode === "graph") return hitTestGraph(sx, sy);
@@ -581,11 +594,10 @@ function hitTest(sx, sy) {
   if (best && bestArea <= 30 * 30) return best;     // 작은 노드는 파이프보다 우선
   let eb = null, ed = 6;
   for (const e of G.edges) {
-    if (e.type !== "PIPE" || !e.geometry || (e.virtual && !o.virtual)) continue;
-    for (let i = 2; i < e.geometry.length; i += 2) {
-      const a = W2S(e.geometry[i - 2], e.geometry[i - 1]), b = W2S(e.geometry[i], e.geometry[i + 1]);
-      const d = distPointSeg([sx, sy], a, b); if (d < ed) { ed = d; eb = { type: "edge", item: e }; }
-    }
+    if (e.type !== "PIPE" || (e.virtual && !o.virtual)) continue;
+    const A = nodeById.get(e.from), B = nodeById.get(e.to);
+    if (!A || !B || A.x == null || B.x == null) continue;
+    const d = distPointSeg([sx, sy], W2S(A.x, A.y), W2S(B.x, B.y)); if (d < ed) { ed = d; eb = { type: "edge", item: e }; }
   }
   return eb || best;
 }
@@ -596,7 +608,7 @@ let GD = null, simAlpha = 0, simRAF = null;
 const PALETTE = ["#F79767", "#57C7E3", "#F16667", "#D9C8AE", "#8DCC93", "#ECB5C9", "#4C8EDA", "#FFC454", "#DA7194", "#569480", "#C990C0", "#A5ABB6"];
 let labelColors = new Map();
 function labelColor(n) {
-  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? "#ff9f43" : "#8b93a7";
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? "#ff9f43" : "#cbd5e1";
   if (n.label === "PipeEnd") return "#ef4444";
   if (!labelColors.has(n.label)) labelColors.set(n.label, PALETTE[labelColors.size % PALETTE.length]);
   return labelColors.get(n.label);
@@ -757,7 +769,7 @@ function drawGraph() {
     ctx.globalAlpha = on ? 1 : 0.18;
     const c = labelColor(n);
     if (isSel || n === hover) { ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.fillStyle = isSel ? "#ffffff88" : "#ffffff33"; ctx.fill(); }
-    ctx.beginPath(); ctx.arc(x, y, Math.max(r, 2), 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, Math.max(r, n.label === "Tee" ? 3.5 : 2.5), 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = "#00000055"; ctx.stroke();
     if (o.label && n.label !== "Tee" && r >= 11) {
       let txt = n.tag || n.label;
@@ -813,7 +825,7 @@ function showDetail() {
   const d = $("detail");
   if (!sel) { d.innerHTML = '<div class="sub">노드나 파이프를 클릭하면 정보가 나와요.<br>드래그: 이동 · 휠: 확대/축소</div>'; return; }
   const it = sel.item;
-  const rows = Object.entries(it).filter(([k, v]) => v != null && v !== "" && k !== "geometry")
+  const rows = Object.entries(it).filter(([k, v]) => v != null && v !== "")
     .map(([k, v]) => {
       let val = esc(typeof v === "object" ? JSON.stringify(v) : v);
       if ((k === "from" || k === "to") && nodeById.has(v)) { const n = nodeById.get(v); val = `<span class="link" data-node="${esc(v)}">${esc(n.tag || n.label)} · ${esc(v)}</span>`; }
@@ -921,12 +933,13 @@ function loadFile(file) {
       const pe2 = G.edges.filter(e => e.type === "PIPE");
       $("s-nodes").textContent = G.summary.nodes;
       $("s-edges").textContent = G.summary.pipe_edges;
-      $("s-tees").textContent = G.summary.tees;
+      $("s-tees").textContent = `${G.summary.bend_tees} / ${G.summary.branch_tees}`;
       $("s-lines").textContent = new Set(pe2.map(e => e.attr_LineNumber || e.system_id)).size;
       $("s-virtual").textContent = pe2.filter(e => e.virtual).length;
       $("s-ends").textContent = G.summary.pipe_ends;
       const pi = data.plant_information || {};
-      $("file-name").textContent = `${file.name} · ${G.drawing}${pi.OriginatingSystem ? " · " + pi.OriginatingSystem : ""}${pi.SchemaVersion ? " " + pi.SchemaVersion : ""}`;
+      $("file-name").textContent = `${file.name} · ${G.drawing}${pi.OriginatingSystem ? " · " + pi.OriginatingSystem : ""}${pi.SchemaVersion ? " " + pi.SchemaVersion : ""}`
+        + ` · 중심선 점 ${G.summary.centerline_points}개, 중심선 없는 세그먼트 ${G.summary.segments_without_centerline}/${data.pipes.length}`;
       drop.classList.add("hidden"); $("err").textContent = "";
       showDetail(); resize(); fit();
     } catch (err) {

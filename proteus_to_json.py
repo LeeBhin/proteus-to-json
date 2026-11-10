@@ -414,7 +414,26 @@ def _is_bend(prev, cur, nxt, eps=1e-3):
     return abs(cross) > eps or dot < 0
 
 
-def build_graph(p, data, tol=0.5):
+def auto_tol(p, data):
+    """좌표 일치 허용 오차: 도면 크기(대각선)의 1/10000. 단위가 mm든 m든 동작하도록."""
+    ext = (data.get("drawing") or {}).get("extent") or {}
+    if ext.get("width") and ext.get("height"):
+        diag = math.hypot(ext["width"], ext["height"])
+    else:
+        xs, ys = [], []
+        for el in p.root.iter():
+            if local(el.tag) in ("Coordinate", "Location"):
+                x, y = num(attr(el, "X")), num(attr(el, "Y"))
+                if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                    xs.append(x); ys.append(y)
+        diag = math.hypot(max(xs) - min(xs), max(ys) - min(ys)) if xs else 1000.0
+    return diag * 1e-4 if diag > 0 else 0.1
+
+
+def build_graph(p, data, tol=None, include_geometry=False):
+    """CenterLine 좌표는 꺾임 Tee/부품 순서/분기 위치 계산에만 쓰고, 출력에는 넣지 않는다 (include_geometry=True면 포함)."""
+    if not tol:
+        tol = auto_tol(p, data)
     dname = (data.get("drawing") or {}).get("name") or os.path.splitext(data["source_file"])[0]
     nid = lambda raw: f"{dname}:{raw}"
     nodes, edges = {}, []
@@ -625,9 +644,11 @@ def build_graph(p, data, tol=0.5):
                 continue
             if cur is not None and cur != e[1]:
                 length = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(geom, geom[1:]))
-                edges.append({"id": f"{nid(seg_id)}#{k}", "type": "PIPE", "from": cur, "to": e[1],
-                              **base, "length": round(length, 3),
-                              "geometry": [round(v, 3) for pt in geom for v in pt]})
+                edge = {"id": f"{nid(seg_id)}#{k}", "type": "PIPE", "from": cur, "to": e[1],
+                        **base, "length": round(length, 3)}
+                if include_geometry:
+                    edge["geometry"] = [round(v, 3) for pt in geom for v in pt]
+                edges.append(edge)
                 k += 1
             cur, geom = e[1], [e[2]] if e[2] else []
 
@@ -638,6 +659,11 @@ def build_graph(p, data, tol=0.5):
             "edges": len(edges),
             "pipe_edges": sum(1 for e in edges if e["type"] == "PIPE"),
             "tees": sum(1 for n in nodes.values() if n["label"] == "Tee"),
+            "bend_tees": sum(1 for n in nodes.values() if n["label"] == "Tee" and "bend" in n["tee_kinds"]),
+            "branch_tees": sum(1 for n in nodes.values() if n["label"] == "Tee" and "branch" in n["tee_kinds"]),
+            "centerline_points": sum(len(sg["poly"]) for sg in segs.values()),
+            "segments_without_centerline": sum(1 for sg in segs.values() if not sg["poly"]),
+            "tol": tol,
             "pipe_ends": sum(1 for n in nodes.values() if n["label"] == "PipeEnd"),
         },
         "nodes": list(nodes.values()),
@@ -708,7 +734,8 @@ def main():
     ap.add_argument("--csv", metavar="DIR", help="CSV도 이 폴더에 생성")
     ap.add_argument("--graph", action="store_true",
                     help="노드/엣지 그래프(<이름>.graph.json) 생성. --csv와 함께 쓰면 neo4j import용 CSV도 생성")
-    ap.add_argument("--tol", type=float, default=0.5, help="좌표 일치 허용 오차 (기본 0.5)")
+    ap.add_argument("--tol", type=float, default=None, help="좌표 일치 허용 오차 (기본: 도면 대각선의 1/10000)")
+    ap.add_argument("--geometry", action="store_true", help="그래프 엣지에 CenterLine 좌표(geometry)도 포함")
     args = ap.parse_args()
 
     for path in args.inputs:
@@ -721,15 +748,16 @@ def main():
         if args.csv:
             write_csv(data, args.csv, stem)
         if args.graph:
-            g = build_graph(parser, data, args.tol)
+            g = build_graph(parser, data, args.tol, args.geometry)
             gout = os.path.splitext(out)[0] + ".graph.json"
             with open(gout, "w", encoding="utf-8") as f:
                 json.dump(g, f, ensure_ascii=False, indent=2)
             if args.csv:
                 write_graph_csv(g, args.csv, stem)
             gs = g["summary"]
-            print(f"[GRAPH] {gout} | nodes {gs['nodes']} (tee {gs['tees']}), edges {gs['edges']} "
-                  f"(pipe {gs['pipe_edges']})", file=sys.stderr)
+            print(f"[GRAPH] {gout} | nodes {gs['nodes']} (tee: bend {gs['bend_tees']}, branch {gs['branch_tees']}), "
+                  f"edges {gs['edges']} (pipe {gs['pipe_edges']}), centerline pts {gs['centerline_points']}, "
+                  f"segments w/o centerline {gs['segments_without_centerline']}, tol {gs['tol']:.4g}", file=sys.stderr)
         s = data["summary"]
         print(f"[OK] {path} -> {out} | symbols {s['symbols']}, pipes {s['pipes']}, "
               f"connections {s['connections']} (virtual {s['virtual_connections']})", file=sys.stderr)

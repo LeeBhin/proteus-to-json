@@ -40,7 +40,7 @@ Windows에서 `python`이 안 되면 `py`를 쓰세요.
 - `PipeEnd` — 연결 대상이 없는 파이프 끝
 
 **엣지**
-- `PIPE` — 노드와 노드 사이의 배관 구간. 라인 속성(`attr_*`), `segment_id`, `system_id`, `flow`, `virtual`, `length`, `geometry`(x1,y1,x2,y2,...)
+- `PIPE` — 노드와 노드 사이의 배관 구간. 라인 속성(`attr_*`), `segment_id`, `system_id`, `flow`, `virtual`, `length`
 - `PART_OF` — 노즐 → 기기
 
 변환 규칙
@@ -51,6 +51,7 @@ Windows에서 `python`이 안 되면 `py`를 쓰세요.
 5. `VirtualPipeSeg`는 `virtual: true`인 엣지가 됩니다.
 
 노드 ID는 `도면명:원본ID` 형식이라 여러 도면을 한 그래프에 합쳐도 겹치지 않습니다.
-좌표 일치 허용 오차는 `--tol` (기본 0.5).
+CenterLine 좌표는 꺾임 Tee · 부품 순서 · 분기 위치를 계산하는 재료로만 쓰고 결과에는 넣지 않습니다 (필요하면 `--geometry`).
+좌표 일치 허용 오차는 도면 대각선의 1/10000로 자동 결정되며(`--tol`로 지정 가능), 좌표 단위가 mm든 m든 동작합니다.
 
 예시: `examples/sample.xml` → `sample.json`, `sample.graph.json`
