@@ -103,6 +103,7 @@
         <span><i style="background:var(--branch);border-radius:50%"></i>분기 Tee</span>
         <span><i style="background:var(--bend);border-radius:50%"></i>꺾임 Tee</span>
         <span><i style="background:var(--end)"></i>미연결 끝</span>
+        <span style="grid-column:1/-1"><i style="border:1px dashed var(--muted)"></i>점선 사각형 = XML에 크기(Extent) 없음</span>
       </div>
     </section>
     <section>
@@ -272,7 +273,8 @@ function buildGraph(data, tol = 0.5) {
     addNode(nid(s.id), s.component_class || s.type, {
       kind: s.type, component_class: s.component_class, component_name: s.component_name, tag: s.tag_name, source_id: s.id,
       x: loc ? loc[0] : null, y: loc ? loc[1] : null, rotation_deg: pos.rotation_deg ?? null, mirrored: pos.mirrored ?? null,
-      width: ext.width ?? null, height: ext.height ?? null, persistent_id: (s.persistent_id || {}).identifier || null, drawing: dname,
+      width: ext.width ?? null, height: ext.height ?? null,
+      min_x: ext.min?.x ?? null, min_y: ext.min?.y ?? null, max_x: ext.max?.x ?? null, max_y: ext.max?.y ?? null, persistent_id: (s.persistent_id || {}).identifier || null, drawing: dname,
       ...flatProps(s.attributes, "attr_"),
     });
   }
@@ -417,12 +419,24 @@ function lineColor(key) {
   return lineColors.get(key);
 }
 function nodeStyle(n) {
-  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: "#ff9f43", shape: "dot", r: 4.5 } : { c: "#6b7280", shape: "dot", r: 2.5, bend: true };
-  if (n.label === "PipeEnd") return { c: "#ef4444", shape: "x", r: 5 };
-  if (n.kind === "Equipment") return { c: "#22c55e", shape: "box" };
-  if (n.kind === "Nozzle") return { c: "#a78bfa", shape: "sq", r: 3.5 };
-  if (/Instrument/i.test(n.kind)) return { c: "#38bdf8", shape: "circle", r: 6 };
-  return { c: "#eab308", shape: "diamond", r: 6 };
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: "#ff9f43", tee: true, r: 4.5 } : { c: "#6b7280", tee: true, r: 2.5, bend: true };
+  if (n.label === "PipeEnd") return { c: "#ef4444" };
+  if (n.kind === "Equipment") return { c: "#22c55e" };
+  if (n.kind === "Nozzle") return { c: "#a78bfa" };
+  if (/Instrument/i.test(n.kind)) return { c: "#38bdf8" };
+  return { c: "#eab308" };
+}
+const hasBox = n => [n.min_x, n.min_y, n.max_x, n.max_y].every(v => typeof v === "number");
+// 화면상의 노드 사각형: Extent(바운딩 박스)가 있으면 그 크기, 없으면 기본 크기(점선)
+function nodeRect(n) {
+  if (hasBox(n)) {
+    const [x0, y0] = W2S(n.min_x, n.max_y), [x1, y1] = W2S(n.max_x, n.min_y);
+    let w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h / 2;
+    w = Math.max(w, 5); h = Math.max(h, 5);
+    return { x: cx - w / 2, y: cy - h / 2, w, h, sized: true };
+  }
+  const [cx, cy] = W2S(n.x, n.y), d = 8;
+  return { x: cx - d / 2, y: cy - d / 2, w: d, h: d, sized: false };
 }
 
 function resize() {
@@ -436,7 +450,7 @@ const S2W = (sx, sy) => [(sx - view.tx) / view.s, -(sy - view.ty) / view.s];
 function computeBounds() {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (x, y) => { if (x == null || y == null) return; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
-  for (const n of G.nodes) { add(n.x, n.y); if (n.width) { add(n.x - n.width / 2, n.y - n.height / 2); add(n.x + n.width / 2, n.y + n.height / 2); } }
+  for (const n of G.nodes) { add(n.x, n.y); if (hasBox(n)) { add(n.min_x, n.min_y); add(n.max_x, n.max_y); } }
   for (const e of G.edges) if (e.geometry) for (let i = 0; i < e.geometry.length; i += 2) add(e.geometry[i], e.geometry[i + 1]);
   if (!isFinite(x0)) { x0 = 0; y0 = 0; x1 = 100; y1 = 100; }
   return { x0, y0, x1, y1 };
@@ -500,25 +514,19 @@ function draw() {
     const [x, y] = W2S(n.x, n.y);
     const on = !dim || (hiNodes && hiNodes.has(n.id)) || (sel && sel.type === "edge" && (sel.item.from === n.id || sel.item.to === n.id));
     ctx.globalAlpha = on ? 1 : 0.2;
-    const isSel = sel && sel.type === "node" && sel.item === n;
-    ctx.fillStyle = st.c; ctx.strokeStyle = isSel ? "#fff" : st.c; ctx.lineWidth = isSel ? 2.5 : 1.5;
-    const k = (n === hover || isSel) ? 1.4 : 1;
-    if (st.shape === "box") {
-      const w = Math.max((n.width || 10) * view.s, 10), h = Math.max((n.height || 10) * view.s, 10);
-      ctx.fillStyle = st.c + "33"; ctx.fillRect(x - w / 2, y - h / 2, w, h); ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-    } else if (st.shape === "diamond") {
-      const r = st.r * k; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill(); if (isSel) ctx.stroke();
-    } else if (st.shape === "sq") {
-      const r = st.r * k; ctx.fillRect(x - r, y - r, r * 2, r * 2); if (isSel) ctx.strokeRect(x - r, y - r, r * 2, r * 2);
-    } else if (st.shape === "x") {
-      const r = st.r * k; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.lineWidth = 2; ctx.stroke();
-    } else {
-      ctx.beginPath(); ctx.arc(x, y, st.r * k, 0, Math.PI * 2); ctx.fill(); if (isSel) ctx.stroke();
+    const isSel = sel && sel.type === "node" && sel.item === n, isHov = n === hover;
+    if (st.tee) {
+      ctx.fillStyle = st.c; ctx.beginPath(); ctx.arc(x, y, st.r * (isSel || isHov ? 1.5 : 1), 0, Math.PI * 2); ctx.fill();
+      if (isSel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); }
+      continue;
     }
+    const R = nodeRect(n);
+    ctx.fillStyle = st.c + "38"; ctx.fillRect(R.x, R.y, R.w, R.h);
+    ctx.strokeStyle = isSel ? "#fff" : st.c; ctx.lineWidth = isSel ? 2.5 : (isHov ? 2.2 : 1.4);
+    ctx.setLineDash(R.sized ? [] : [2, 2]); ctx.strokeRect(R.x, R.y, R.w, R.h); ctx.setLineDash([]);
     if (o.label && n.tag && n.kind !== "Nozzle") {
       ctx.fillStyle = "#e6e8ee"; ctx.font = "11px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
-      const off = st.shape === "box" ? Math.max((n.height || 10) * view.s, 10) / 2 + 12 : 14;
-      ctx.textAlign = "center"; ctx.fillText(n.tag, x, y - off + 4);
+      ctx.textAlign = "center"; ctx.fillText(n.tag, R.x + R.w / 2, R.y - 5);
     }
   }
   ctx.globalAlpha = 1;
@@ -542,16 +550,20 @@ function drawArrow(e) {
 
 function hitTest(sx, sy) {
   if (!G) return null;
-  const o = opt(); let best = null, bd = 9;
+  const o = opt(); let best = null, bestArea = Infinity;
   for (const n of G.nodes) {
     if (n.x == null) continue; const st = nodeStyle(n); if (st.bend && !o.bend) continue;
-    const [x, y] = W2S(n.x, n.y);
-    if (st.shape === "box") {
-      const w = Math.max((n.width || 10) * view.s, 10) / 2, h = Math.max((n.height || 10) * view.s, 10) / 2;
-      if (Math.abs(sx - x) <= w && Math.abs(sy - y) <= h) { const d = 6; if (d < bd) { bd = d; best = { type: "node", item: n }; } }
-    } else { const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = { type: "node", item: n }; } }
+    if (st.tee) {
+      const [x, y] = W2S(n.x, n.y);
+      if (Math.hypot(sx - x, sy - y) <= 7 && 1 < bestArea) { best = { type: "node", item: n }; bestArea = 1; }
+      continue;
+    }
+    const R = nodeRect(n), p = 3;
+    if (sx >= R.x - p && sx <= R.x + R.w + p && sy >= R.y - p && sy <= R.y + R.h + p) {
+      const area = R.w * R.h; if (area < bestArea) { best = { type: "node", item: n }; bestArea = area; }
+    }
   }
-  if (best && best.item.kind !== "Equipment") return best;
+  if (best && bestArea <= 30 * 30) return best;     // 작은 노드는 파이프보다 우선
   let eb = null, ed = 6;
   for (const e of G.edges) {
     if (e.type !== "PIPE" || !e.geometry || (e.virtual && !o.virtual)) continue;

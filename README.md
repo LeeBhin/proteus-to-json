@@ -7,7 +7,7 @@ AVEVA P&ID에서 내보낸 **Proteus XML (schema 3.3.x)** 을 JSON / CSV / 노�
 
 ## 뷰어
 `viewer.html`을 내려받아 브라우저로 열고 XML을 끌어다 놓으면 됩니다.
-- 도면 좌표 그대로 노드/파이프 표시, 드래그 이동 · 휠 확대
+- 도면 좌표 그대로 표시: 노드는 Extent 크기의 사각형(크기 없으면 점선), Tee는 원 · 드래그 이동 · 휠 확대
 - 노드 클릭: 속성 + 연결된 파이프, 파이프 클릭: 같은 라인 강조
 - 태그 / 라인번호 검색
 - `graph.json`, `nodes.csv`, `edges.csv` 내려받기 (neo4j-admin import 헤더 형식)

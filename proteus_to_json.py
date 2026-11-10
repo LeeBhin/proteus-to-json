@@ -444,6 +444,8 @@ def build_graph(p, data, tol=0.5):
             "rotation_deg": pos.get("rotation_deg"),
             "mirrored": pos.get("mirrored"),
             "width": ext.get("width"), "height": ext.get("height"),
+            "min_x": (ext.get("min") or {}).get("x"), "min_y": (ext.get("min") or {}).get("y"),
+            "max_x": (ext.get("max") or {}).get("x"), "max_y": (ext.get("max") or {}).get("y"),
             "persistent_id": (s["persistent_id"] or {}).get("identifier"),
             "drawing": dname,
         }
