@@ -107,17 +107,10 @@
         <label class="chk"><input type="checkbox" id="o-virtual" checked>가상</label>
         <label class="chk"><input type="checkbox" id="o-arrow" checked>흐름</label>
         <label class="chk"><input type="checkbox" id="o-color" checked>라인별 색</label>
+        <label class="chk"><input type="checkbox" id="o-text" checked>텍스트</label>
       </div>
-      <div id="glegend" style="margin-top:8px;display:none"></div>
-      <div class="legend" id="dlegend" style="margin-top:8px">
-        <span><i style="background:var(--equip)"></i>기기</span>
-        <span><i style="background:var(--valve)"></i>배관 부품</span>
-        <span><i style="background:var(--nozzle)"></i>노즐</span>
-        <span><i style="background:var(--branch);border-radius:50%"></i>분기 Tee</span>
-        <span><i style="background:#cbd5e1;border-radius:50%"></i>꺾임 Tee</span>
-        <span><i style="background:var(--end)"></i>미연결 끝</span>
-        <span style="grid-column:1/-1"><i style="border:1px dashed var(--muted)"></i>점선 사각형 = XML에 크기(Extent) 없음</span>
-      </div>
+      <div id="glegend" style="margin-top:8px"></div>
+      <div id="dlegend" style="margin-top:6px;color:var(--muted);font-size:11px">도면 모드: 노드 = 도면 위치·크기(Extent), 점선 사각형 = 크기 정보 없음</div>
     </section>
     <section>
       <input type="search" id="q" placeholder="태그 / 라인번호 / ID 검색 (Enter)">
@@ -160,7 +153,35 @@ const XY = p => (p && typeof p.x === "number" && typeof p.y === "number") ? [p.x
 const hyp = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
 function ancestor(el, name) { let p = el.parentElement; while (p) { if (tagOf(p) === name) return p; p = p.parentElement; } return null; }
-function ownerId(el) { let p = el.parentElement; while (p) { if (attr(p, "ID")) return attr(p, "ID"); p = p.parentElement; } return null; }
+// 요소 ID: ID 속성, 없으면 PersistentID의 Identifier
+function eidOf(el) { const v = attr(el, "ID"); if (v) return v; const p = kid(el, "PersistentID"); return p ? attr(p, "Identifier") : null; }
+function ownerId(el) { let p = el.parentElement; while (p) { if (tagOf(p) !== "PersistentID" && eidOf(p)) return eidOf(p); p = p.parentElement; } return null; }
+const SIGNAL_RE = /signal|information|instrument|measur|actuat/i;
+// 선 요소(계기 신호선 등): 자기 CenterLine/Coordinate를 갖고 Position이 없는 요소 -> 심볼이 아니라 엣지
+function isLineEl(el) {
+  const t = tagOf(el);
+  if (NON_SYMBOL.has(t) || kid(el, "Position")) return false;
+  if (kid(el, "CenterLine") || kid(el, "Coordinate")) return true;
+  return /(Line|Flow)$/.test(t) && !!kid(el, "Connection");
+}
+// Extent가 위치와 동떨어져 있으면 심볼 로컬 좌표로 보고 위치/회전/배율/반전 적용
+function fixExtent(ext, pos, scale) {
+  if (!ext || !pos || ext.width == null) return ext;
+  const loc = XY(pos.location), mn = XY(ext.min), mx = XY(ext.max);
+  if (!loc || !mn || !mx) return ext;
+  const w = mx[0] - mn[0], h = mx[1] - mn[1], pad = Math.max(w, h) * 0.5 + 1e-9;
+  if (mn[0] - pad <= loc[0] && loc[0] <= mx[0] + pad && mn[1] - pad <= loc[1] && loc[1] <= mx[1] + pad) return ext;
+  const sx = scale && typeof scale.x === "number" && scale.x ? scale.x : 1, sy = scale && typeof scale.y === "number" && scale.y ? scale.y : 1;
+  const a = (pos.rotation_deg || 0) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+  const pts = [[mn[0], mn[1]], [mx[0], mn[1]], [mn[0], mx[1]], [mx[0], mx[1]]].map(([x, y]) => {
+    x *= sx; y *= sy; if (pos.mirrored) x = -x;
+    return [loc[0] + x * ca - y * sa, loc[1] + x * sa + y * ca];
+  });
+  const r6 = v => Math.round(v * 1e6) / 1e6;
+  const x0 = Math.min(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), x1 = Math.max(...pts.map(p => p[0])), y1 = Math.max(...pts.map(p => p[1]));
+  return { min: { x: r6(x0), y: r6(y0), z: null }, max: { x: r6(x1), y: r6(y1), z: null }, width: r6(x1 - x0), height: r6(y1 - y0),
+    center: { x: r6((x0 + x1) / 2), y: r6((y0 + y1) / 2) }, local: true, local_min: ext.min, local_max: ext.max };
+}
 
 function parseExtent(el) {
   const e = kid(el, "Extent"); if (!e) return null;
@@ -222,23 +243,44 @@ function parseProteus(doc, fileName) {
   const all = Array.from(root.getElementsByTagName("*"));
   const info = all.find(e => tagOf(e) === "PlantInformation");
   const drawing = all.find(e => tagOf(e) === "Drawing");
-  const symbols = [], pipes = [], connections = [], byId = {}, segEl = {}, sysSegs = {};
+  const symbols = [], pipes = [], connections = [], lines = [], texts = [], lineByEl = new Map(), byId = {}, segEl = {}, sysSegs = {};
   for (const el of all) {
     const t = tagOf(el);
     if (t === "PipingNetworkSegment") {
       const sys = ancestor(el, "PipingNetworkSystem");
       const sa = parseAttrs(sys), ga = parseAttrs(el);
-      const it = { id: attr(el, "ID"), system_id: sys ? attr(sys, "ID") : null, component_class: attr(el, "ComponentClass"),
+      const it = { id: eidOf(el), system_id: sys ? eidOf(sys) : null, component_class: attr(el, "ComponentClass"),
         tag_name: attr(el, "TagName") || attr(sys, "TagName"), persistent_id: parsePid(el), attributes: { ...sa, ...ga } };
       it.virtual = isVirtual(it);
       pipes.push(it); byId[it.id] = it; segEl[it.id] = el; (sysSegs[it.system_id] = sysSegs[it.system_id] || []).push(it.id);
     } else if (t === "Connection") {
+      if (lineByEl.has(el.parentElement)) {           // 선 요소(신호선 등)의 연결
+        const ln = lineByEl.get(el.parentElement);
+        if (ln.from_id == null && ln.to_id == null) Object.assign(ln, { from_id: attr(el, "FromID"), from_node: num(attr(el, "FromNode")), to_id: attr(el, "ToID"), to_node: num(attr(el, "ToNode")) });
+        continue;
+      }
       const seg = ancestor(el, "PipingNetworkSegment");
       connections.push({ segment_id: seg ? attr(seg, "ID") : ownerId(el), from_id: attr(el, "FromID"), from_node: num(attr(el, "FromNode")),
         to_id: attr(el, "ToID"), to_node: num(attr(el, "ToNode")) });
-    } else if (!NON_SYMBOL.has(t) && attr(el, "ID") && (kid(el, "Position") || kid(el, "Extent") || attr(el, "ComponentClass") != null)) {
-      const it = { id: attr(el, "ID"), type: t, component_class: attr(el, "ComponentClass"), component_name: attr(el, "ComponentName"),
-        tag_name: attr(el, "TagName"), parent_id: ownerId(el), position: parsePosition(el), extent: parseExtent(el),
+    } else if (t === "Text") {
+      const pos = parsePosition(el);
+      let symId = null;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const pid = tagOf(p) !== "PersistentID" ? eidOf(p) : null;
+        if (pid && byId[pid] && "type" in byId[pid] && !(pid in segEl)) { symId = pid; break; }
+      }
+      texts.push({ string: attr(el, "String"), owner_id: ownerId(el), symbol_id: symId, location: pos ? pos.location : null,
+        rotation_deg: pos ? pos.rotation_deg ?? null : null, height: num(attr(el, "Height")), width: num(attr(el, "Width")), justification: attr(el, "Justification") });
+    } else if (isLineEl(el) && eidOf(el)) {
+      const pts = [];
+      for (const cl of [el, ...kids(el, "CenterLine")]) for (const c of kids(cl, "Coordinate")) { const q = xyz(c); if (q) pts.push(q); }
+      const it = { id: eidOf(el), type: t, kind: SIGNAL_RE.test(t) ? "SIGNAL" : "LINE", component_class: attr(el, "ComponentClass"), tag_name: attr(el, "TagName"),
+        persistent_id: parsePid(el), attributes: parseAttrs(el), points: pts, from_id: null, from_node: null, to_id: null, to_node: null };
+      lines.push(it); lineByEl.set(el, it);
+    } else if (!NON_SYMBOL.has(t) && eidOf(el) && (kid(el, "Position") || kid(el, "Extent") || attr(el, "ComponentClass") != null)) {
+      const position = parsePosition(el), scale = xyz(kid(el, "Scale"));
+      const it = { id: eidOf(el), type: t, component_class: attr(el, "ComponentClass"), component_name: attr(el, "ComponentName"),
+        tag_name: attr(el, "TagName"), parent_id: ownerId(el), position, extent: fixExtent(parseExtent(el), position, scale),
         persistent_id: parsePid(el), attributes: parseAttrs(el), connection_points: parseCP(el) };
       it.virtual = isVirtual(it);
       symbols.push(it); byId[it.id] = it;
@@ -254,7 +296,7 @@ function parseProteus(doc, fileName) {
     source_file: fileName,
     plant_information: info ? Object.fromEntries(Array.from(info.attributes).map(a => [a.localName || a.name, a.value])) : null,
     drawing: drawing ? { name: attr(drawing, "Name"), extent: parseExtent(drawing) } : null,
-    symbols, pipes, connections, _segEl: segEl, _sysSegs: sysSegs, _diag: coordDiag(all), _all: all,
+    symbols, pipes, connections, lines, texts, _lineEls: new Set(lineByEl.keys()), _segEl: segEl, _sysSegs: sysSegs, _diag: coordDiag(all), _all: all,
   };
 }
 
@@ -370,8 +412,9 @@ function buildGraph(data, tol = null) {
   for (const cl of data._all) {
     if (tagOf(cl) !== "CenterLine") continue;
     const pts = kids(cl, "Coordinate").map(c => XY(xyz(c))).filter(Boolean); if (!pts.length) continue;
+    if (data._lineEls.has(cl.parentElement)) continue;   // 신호선 등 선 요소의 CenterLine 제외
     const owner = ancestor(cl, "PipingNetworkSegment");
-    if (owner && has(segLines, attr(owner, "ID"))) { segLines[attr(owner, "ID")].push(pts); continue; }
+    if (owner && has(segLines, eidOf(owner))) { segLines[eidOf(owner)].push(pts); continue; }
     outsideLines++;
     const ref = parentRef(cl);
     if (has(segLines, ref)) segLines[ref].push(pts);
@@ -382,7 +425,7 @@ function buildGraph(data, tol = null) {
       if (has(data._sysSegs, sref)) (sysLines[sref] = sysLines[sref] || []).push(pts); else unassignedLines++;
     }
   }
-  const segComps = (segId, el) => Array.from(el.getElementsByTagName("*")).filter(c => has(sym, attr(c, "ID")) && ancestor(c, "PipingNetworkSegment") === el && sym[attr(c, "ID")].parent_id === segId).map(c => attr(c, "ID"));
+  const segComps = (segId, el) => Array.from(el.getElementsByTagName("*")).filter(c => tagOf(c) !== "PersistentID" && has(sym, eidOf(c)) && ancestor(c, "PipingNetworkSegment") === el && sym[eidOf(c)].parent_id === segId).map(c => eidOf(c));
   for (const [sref, lines] of Object.entries(sysLines)) {
     const cands = data._sysSegs[sref] || [];
     for (const pts of lines) {
@@ -529,6 +572,28 @@ function buildGraph(data, tol = null) {
       cur = e[1]; geom = e[2] ? [e[2]] : [];
     }
   }
+  // 텍스트 -> Text 노드 (+ 심볼에 속하면 LABEL_OF 엣지)
+  (data.texts || []).forEach((t, i) => {
+    if (!t.string) return;
+    const loc = XY(t.location), id = nid(`TEXT_${i}`);
+    addNode(id, "Text", { kind: "Text", text: t.string, x: loc ? loc[0] : null, y: loc ? loc[1] : null, height: t.height ?? null,
+      rotation_deg: t.rotation_deg ?? null, justification: t.justification ?? null, owner_id: t.owner_id ?? null, drawing: dname });
+    if (has(sym, t.symbol_id)) edges.push({ id: `${id}>LABEL_OF`, type: "LABEL_OF", from: id, to: nid(t.symbol_id) });
+  });
+  // 선 요소(계기 신호선 등) -> SIGNAL / LINE 엣지
+  let linesUnconnected = 0;
+  for (const ln of data.lines || []) {
+    const pts = ln.points.map(XY).filter(Boolean);
+    const ends = [[ln.from_id, ln.from_node, pts[0] || null], [ln.to_id, ln.to_node, pts[pts.length - 1] || null]].map(([ref, idx, near]) => {
+      if (ref && !has(sym, ref) && has(pid2sym, ref)) ref = pid2sym[ref];
+      if (has(sym, ref)) return [nid(ref), false];
+      if (near) { const hit = snapSym(near, null, new Set()); if (hit) return [nid(hit), true]; }
+      return null;
+    });
+    if (!ends[0] || !ends[1] || ends[0][0] === ends[1][0]) { linesUnconnected++; continue; }
+    edges.push({ id: nid(ln.id), type: ln.kind, from: ends[0][0], to: ends[1][0], line_type: ln.type, tag: ln.tag_name, drawing: dname,
+      connection_inferred: ["start", "end"].filter((_, i) => ends[i][1]).join(";") || null, ...flatProps(ln.attributes, "attr_") });
+  }
   const nl = [...nodes.values()];
   return { drawing: dname, summary: { nodes: nl.length, edges: edges.length, pipe_edges: edges.filter(e => e.type === "PIPE").length,
     tees: nl.filter(n => n.label === "Tee").length,
@@ -539,6 +604,8 @@ function buildGraph(data, tol = null) {
     centerlines_outside_segment: outsideLines, centerlines_unassigned: unassignedLines,
     component_tees: nl.filter(n => n.tee_source === "component").length,
     inferred_connection_ends: Object.values(segs).reduce((a, s) => a + s.inferred.length, 0),
+    line_edges: edges.filter(e => e.type === "SIGNAL" || e.type === "LINE").length, lines_unconnected: linesUnconnected,
+    texts: nl.filter(n => n.label === "Text").length,
     segments_without_centerline: Object.values(segs).filter(s => !s.poly.length).length, tol }, nodes: nl, edges };
 }
 
@@ -547,7 +614,7 @@ const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d"), tip = $("tip");
 let G = null, nodeById = new Map(), bounds = null;
 let mode = "drawing", views = { drawing: { s: 1, tx: 0, ty: 0 }, graph: { s: 1, tx: 0, ty: 0 } }, view = views.drawing, sel = null, hover = null, fileStem = "graph";
-const opt = () => ({ bend: $("o-bend").checked, label: $("o-label").checked, virtual: $("o-virtual").checked, arrow: $("o-arrow").checked, color: $("o-color").checked });
+const opt = () => ({ bend: $("o-bend").checked, label: $("o-label").checked, virtual: $("o-virtual").checked, arrow: $("o-arrow").checked, color: $("o-color").checked, text: $("o-text").checked });
 
 let lineColors = new Map();
 function lineColor(key) {
@@ -556,12 +623,9 @@ function lineColor(key) {
   return lineColors.get(key);
 }
 function nodeStyle(n) {
-  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: "#ff9f43", tee: true, r: 5 } : { c: "#cbd5e1", tee: true, r: 3.5, bend: true };
-  if (n.label === "PipeEnd") return { c: "#ef4444" };
-  if (n.kind === "Equipment") return { c: "#22c55e" };
-  if (n.kind === "Nozzle") return { c: "#a78bfa" };
-  if (/Instrument/i.test(n.kind)) return { c: "#38bdf8" };
-  return { c: "#eab308" };
+  if (n.label === "Text") return { c: "#e5e7eb", text: true };
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: labelColor(n), tee: true, r: 5 } : { c: labelColor(n), tee: true, r: 3.5, bend: true };
+  return { c: labelColor(n) };
 }
 const hasBox = n => [n.min_x, n.min_y, n.max_x, n.max_y].every(v => typeof v === "number");
 // 화면상의 노드 사각형: Extent(바운딩 박스)가 있으면 그 크기, 없으면 기본 크기(점선)
@@ -612,63 +676,125 @@ function draw() {
   ctx.clearRect(0, 0, r.width, r.height);
   if (!G) return;
   if (mode === "graph") return drawGraph();
+  drawDrawing();
+}
+const FONT = "-apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
+const EDGE_STYLE = {
+  PIPE: { w: 2, dash: [] }, SIGNAL: { c: "#38bdf8", w: 1.3, dash: [6, 3] }, LINE: { c: "#9aa3b5", w: 1.3, dash: [] },
+  PART_OF: { c: "#8b93a7", w: 1, dash: [2, 3] }, LABEL_OF: { c: "#6b7280", w: 1, dash: [1, 3] },
+};
+function edgeColor(e, o) {
+  if (e.type === "PIPE") return o.color ? lineColor(e.attr_LineNumber || e.system_id) : "#a5abb6";
+  return (EDGE_STYLE[e.type] || EDGE_STYLE.LINE).c;
+}
+function edgeLabel(e) {
+  if (e.type === "PIPE") return (e.attr_LineNumber || e.line_tag || "PIPE") + (e.virtual ? " (가상)" : "") + (e.bends_merged ? ` (꺾임 ${e.bends_merged})` : "");
+  if (e.type === "SIGNAL" || e.type === "LINE") return e.tag || e.type;
+  return e.type;
+}
+function arrowHead(x1, y1, ux, uy, s = 7) {
+  ctx.beginPath();
+  ctx.moveTo(x1 + ux * 1.5, y1 + uy * 1.5);
+  ctx.lineTo(x1 - ux * s - uy * s * 0.55, y1 - uy * s + ux * s * 0.55);
+  ctx.lineTo(x1 - ux * s + uy * s * 0.55, y1 - uy * s - ux * s * 0.55);
+  ctx.closePath(); ctx.fill();
+}
+function edgeText(txt, mx, my, ang, on) {
+  if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+  ctx.save(); ctx.translate(mx, my); ctx.rotate(ang);
+  ctx.font = `10px ${FONT}`;
+  const w = ctx.measureText(txt).width + 8;
+  ctx.fillStyle = "#0f1115"; ctx.fillRect(-w / 2, -7, w, 14);
+  ctx.fillStyle = on ? "#c9cfdb" : "#555"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, 0, 0);
+  ctx.restore();
+}
+// 도면 텍스트: Justification(LeftBottom, CenterCenter...)에 맞춰 위치, 회전 반영. 화면상 박스를 돌려줌(클릭 판정용)
+let textBoxes = new Map();
+function drawTextNode(n, on, isSel, isHov) {
+  const px = (n.height || 2.5) * view.s;
+  if (px < 3) return;
+  const [x, y] = W2S(n.x, n.y), j = String(n.justification || "LeftBottom").toLowerCase();
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-(n.rotation_deg || 0) * Math.PI / 180);
+  ctx.font = `${px}px ${FONT}`;
+  ctx.textAlign = j.startsWith("center") ? "center" : j.startsWith("right") ? "right" : "left";
+  ctx.textBaseline = j.endsWith("center") || j.endsWith("middle") ? "middle" : j.endsWith("top") ? "top" : "alphabetic";
+  const w = ctx.measureText(n.text).width;
+  ctx.globalAlpha = on ? 1 : 0.2;
+  ctx.fillStyle = isSel ? "#ffffff" : isHov ? "#fde68a" : "#c9cfdb";
+  ctx.fillText(n.text, 0, 0);
+  ctx.restore();
+  const ox = ctx.textAlign === "center" ? -w / 2 : ctx.textAlign === "right" ? -w : 0;
+  const vertical = Math.abs(((n.rotation_deg || 0) % 180) - 90) < 45;
+  textBoxes.set(n.id, vertical ? { x: x - px, y: y - w - 2, w: px * 1.4, h: w + 4 } : { x: x + ox - 2, y: y - px, w: w + 4, h: px * 1.3 });
+}
+function drawDrawing() {
   const o = opt();
   const hiSeg = sel && sel.type === "edge" ? sel.item.segment_id : null;
   const hiLine = sel && sel.type === "edge" ? (sel.item.attr_LineNumber || sel.item.system_id) : null;
   const hiNodes = sel && sel.type === "node" ? neighborsOf(sel.item.id) : null;
   const dim = !!sel;
-
-  // 엣지
+  textBoxes = new Map();
+  // 엣지 (Neo4j처럼 끝 화살표, 노드 경계에서 자름)
   for (const e of G.edges) {
-    if (e.type !== "PIPE") continue;
+    if (e.type === "LABEL_OF") continue;                       // 텍스트는 제자리에 그려지므로 연결선 생략
     if (e.virtual && !o.virtual) continue;
     const A = nodeById.get(e.from), B = nodeById.get(e.to);
     if (!A || !B || A.x == null || B.x == null) continue;
-    const lineKey = e.attr_LineNumber || e.system_id;
-    let on = !dim || (hiSeg && (e.segment_id === hiSeg || (hiLine && lineKey === hiLine))) || (hiNodes && hiNodes.has(e.from) && hiNodes.has(e.to) && (e.from === sel.item.id || e.to === sel.item.id));
-    const isSel = sel && sel.type === "edge" && sel.item === e;
-    ctx.strokeStyle = isSel ? "#ffffff" : (o.color ? lineColor(lineKey) : "#9aa3b5");
-    ctx.globalAlpha = on ? 1 : 0.15;
-    ctx.lineWidth = isSel ? 3.5 : (e === hover ? 3 : 2);
-    ctx.setLineDash(e.virtual ? [5, 4] : []);
     const S = edgeSeg(A, B, o); if (!S) continue;
-    const [ax, ay, bx, by] = S;
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    if (o.arrow && e.flow) drawArrow(ax, ay, bx, by);
+    const [ax, ay, bx, by] = S, L = Math.hypot(bx - ax, by - ay);
+    const lineKey = e.attr_LineNumber || e.system_id;
+    const on = !dim || (e.type === "PIPE" && hiSeg && (e.segment_id === hiSeg || (hiLine && lineKey === hiLine))) || (sel && sel.item === e)
+      || (hiNodes && (e.from === sel.item.id || e.to === sel.item.id));
+    const isSel = sel && sel.type === "edge" && sel.item === e, st = EDGE_STYLE[e.type] || EDGE_STYLE.LINE;
+    ctx.globalAlpha = on ? 1 : 0.13;
+    ctx.strokeStyle = ctx.fillStyle = isSel ? "#ffffff" : edgeColor(e, o);
+    ctx.lineWidth = isSel ? st.w + 1.5 : (e === hover ? st.w + 1 : st.w);
+    ctx.setLineDash(e.virtual ? [5, 4] : st.dash);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+    if (o.arrow && e.type !== "PART_OF" && L > 10) arrowHead(bx, by, (bx - ax) / L, (by - ay) / L, e.type === "PIPE" ? 7 : 5);
+    if (o.label && e.type !== "PART_OF" && L > 90) edgeText(edgeLabel(e), (ax + bx) / 2, (ay + by) / 2, Math.atan2(by - ay, bx - ax), on);
   }
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
-  // PART_OF
-  ctx.strokeStyle = "#a78bfa55"; ctx.lineWidth = 1;
-  for (const e of G.edges) if (e.type === "PART_OF") {
-    const a = nodeById.get(e.from), b = nodeById.get(e.to); if (!a || !b || a.x == null || b.x == null) continue;
-    const S = edgeSeg(a, b, o); if (!S) continue;   // 노즐이 기기 경계에 붙어 있으면 선이 거의 없음
-    ctx.globalAlpha = !dim || (hiNodes && hiNodes.has(a.id) && hiNodes.has(b.id)) ? 1 : 0.15;
-    ctx.beginPath(); ctx.moveTo(S[0], S[1]); ctx.lineTo(S[2], S[3]); ctx.stroke();
-  }
-  // 노드
+  ctx.globalAlpha = 1;
+  // 노드 (위치·크기 = 도면)
   for (const n of G.nodes) {
     if (n.x == null) continue;
     const st = nodeStyle(n);
     if (st.bend && !o.bend) continue;
-    const [x, y] = W2S(n.x, n.y);
+    if (st.text && !o.text) continue;
     const on = !dim || (hiNodes && hiNodes.has(n.id)) || (sel && sel.type === "edge" && (sel.item.from === n.id || sel.item.to === n.id));
-    ctx.globalAlpha = on ? 1 : 0.2;
     const isSel = sel && sel.type === "node" && sel.item === n, isHov = n === hover;
+    if (st.text) { drawTextNode(n, on, isSel, isHov); continue; }
+    ctx.globalAlpha = on ? 1 : 0.2;
+    const [x, y] = W2S(n.x, n.y);
     if (st.tee) {
-      ctx.fillStyle = st.c; ctx.beginPath(); ctx.arc(x, y, st.r * (isSel || isHov ? 1.5 : 1), 0, Math.PI * 2); ctx.fill();
+      const rr = st.r * (isSel || isHov ? 1.5 : 1);
+      ctx.fillStyle = st.c; ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill();
       if (isSel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); }
       continue;
     }
-    const R = nodeRect(n);
-    ctx.fillStyle = st.c + "38"; ctx.fillRect(R.x, R.y, R.w, R.h);
+    const R = nodeRect(n), small = R.w * R.h <= 26 * 26;
+    ctx.fillStyle = st.c + (small ? "e6" : "40"); ctx.fillRect(R.x, R.y, R.w, R.h);
     ctx.strokeStyle = isSel ? "#fff" : st.c; ctx.lineWidth = isSel ? 2.5 : (isHov ? 2.2 : 1.4);
     ctx.setLineDash(R.sized ? [] : [2, 2]); ctx.strokeRect(R.x, R.y, R.w, R.h); ctx.setLineDash([]);
-    if (o.label && n.tag && n.kind !== "Nozzle") {
-      ctx.fillStyle = "#e6e8ee"; ctx.font = "11px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
-      ctx.textAlign = "center"; ctx.fillText(n.tag, R.x + R.w / 2, R.y - 5);
+    // 캡션: 같은 글자의 도면 텍스트가 보이면 생략, 안에 들어가면 안쪽, 아니면 위
+    const cap = n.tag || (n.kind === "Nozzle" ? "" : n.label);
+    if (o.label && cap && !(o.text && taggedByText.has(n.id))) {
+      ctx.font = `11px ${FONT}`; ctx.textAlign = "center";
+      const w = ctx.measureText(cap).width;
+      if (w <= R.w - 4 && R.h >= 14) { ctx.fillStyle = small ? "#111" : "#f3f4f6"; ctx.textBaseline = "middle"; ctx.fillText(cap, R.x + R.w / 2, R.y + R.h / 2); }
+      else if (n.kind !== "Nozzle") { ctx.fillStyle = "#e6e8ee"; ctx.textBaseline = "alphabetic"; ctx.fillText(cap, R.x + R.w / 2, R.y - 5); }
+      ctx.textBaseline = "alphabetic";
     }
   }
   ctx.globalAlpha = 1;
+}
+let taggedByText = new Set();   // 같은 글자의 텍스트가 붙어 있는 노드 (캡션 중복 방지)
+function computeTagged() {
+  taggedByText = new Set();
+  for (const e of G.edges) if (e.type === "LABEL_OF") {
+    const t = nodeById.get(e.from), n = nodeById.get(e.to);
+    if (t && n && n.tag && String(t.text).trim() === String(n.tag).trim()) taggedByText.add(n.id);
+  }
 }
 // 선분 P0->P1 중 사각형 안에 있는 구간 [t0, t1] (Liang–Barsky). 안 지나가면 null
 function clipT(x0, y0, x1, y1, R) {
@@ -690,6 +816,7 @@ function edgeSeg(A, B, o) {
   let ts = 0, te = 1;
   const cut = (n, atStart) => {
     const st = nodeStyle(n);
+    if (st.text) return;
     if (st.tee) {
       if (st.bend && !o.bend) return;
       const r = st.r / L;
@@ -705,21 +832,18 @@ function edgeSeg(A, B, o) {
   if (te - ts <= 1e-6) return null;                                  // 두 노드가 겹쳐 보이는 선이 없음
   return [ax + (bx - ax) * ts, ay + (by - ay) * ts, ax + (bx - ax) * te, ay + (by - ay) * te];
 }
-function drawArrow(ax, ay, bx, by) {
-  const d = Math.hypot(bx - ax, by - ay); if (d < 24) return;
-  const sx = (ax + bx) / 2, sy = (ay + by) / 2, ang = Math.atan2(by - ay, bx - ax), s = 6;
-  ctx.fillStyle = ctx.strokeStyle; ctx.beginPath();
-  ctx.moveTo(sx + Math.cos(ang) * s, sy + Math.sin(ang) * s);
-  ctx.lineTo(sx + Math.cos(ang + 2.5) * s, sy + Math.sin(ang + 2.5) * s);
-  ctx.lineTo(sx + Math.cos(ang - 2.5) * s, sy + Math.sin(ang - 2.5) * s);
-  ctx.closePath(); ctx.fill();
-}
 function hitTest(sx, sy) {
   if (!G) return null;
   if (mode === "graph") return hitTestGraph(sx, sy);
   const o = opt(); let best = null, bestArea = Infinity;
   for (const n of G.nodes) {
-    if (n.x == null) continue; const st = nodeStyle(n); if (st.bend && !o.bend) continue;
+    if (n.x == null) continue; const st = nodeStyle(n);
+    if ((st.bend && !o.bend) || (st.text && !o.text)) continue;
+    if (st.text) {
+      const B = textBoxes.get(n.id);
+      if (B && sx >= B.x && sx <= B.x + B.w && sy >= B.y && sy <= B.y + B.h && B.w * B.h < bestArea) { best = { type: "node", item: n }; bestArea = B.w * B.h; }
+      continue;
+    }
     if (st.tee) {
       const [x, y] = W2S(n.x, n.y);
       if (Math.hypot(sx - x, sy - y) <= 7 && 1 < bestArea) { best = { type: "node", item: n }; bestArea = 1; }
@@ -730,10 +854,10 @@ function hitTest(sx, sy) {
       const area = R.w * R.h; if (area < bestArea) { best = { type: "node", item: n }; bestArea = area; }
     }
   }
-  if (best && bestArea <= 30 * 30) return best;     // 작은 노드는 파이프보다 우선
+  if (best && bestArea <= 30 * 30) return best;     // 작은 노드는 엣지보다 우선
   let eb = null, ed = 6;
   for (const e of G.edges) {
-    if (e.type !== "PIPE" || (e.virtual && !o.virtual)) continue;
+    if (e.type === "LABEL_OF" || e.type === "PART_OF" || (e.virtual && !o.virtual)) continue;
     const A = nodeById.get(e.from), B = nodeById.get(e.to);
     if (!A || !B || A.x == null || B.x == null) continue;
     const S = edgeSeg(A, B, o); if (!S) continue;
@@ -748,12 +872,14 @@ let GD = null, simAlpha = 0, simRAF = null;
 const PALETTE = ["#F79767", "#57C7E3", "#F16667", "#D9C8AE", "#8DCC93", "#ECB5C9", "#4C8EDA", "#FFC454", "#DA7194", "#569480", "#C990C0", "#A5ABB6"];
 let labelColors = new Map();
 function labelColor(n) {
+  if (n.label === "Text") return "#e5e7eb";
   if (n.label === "Tee") return n.tee_kinds.includes("branch") ? "#ff9f43" : "#cbd5e1";
   if (n.label === "PipeEnd") return "#ef4444";
   if (!labelColors.has(n.label)) labelColors.set(n.label, PALETTE[labelColors.size % PALETTE.length]);
   return labelColors.get(n.label);
 }
 function nodeRadius(n) {
+  if (n.label === "Text") return 10;
   if (n.label === "Tee") return n.tee_kinds.includes("branch") ? 9 : 6;
   if (n.label === "PipeEnd") return 10;
   if (n.kind === "Equipment") return 28;
@@ -779,8 +905,8 @@ function buildDisplay() {
     links.push(chain.length === 1 ? e : { ...e, id: chain.map(c => c.id).join("+"), to: cur.to, bends_merged: chain.length - 1,
       length: +chain.reduce((a, c) => a + (c.length || 0), 0).toFixed(3), merged_edges: chain.map(c => c.id) });
   }
-  for (const e of G.edges) if (e.type === "PART_OF") links.push(e);
-  const keep = G.nodes.filter(n => !isC(n.id));
+  for (const e of G.edges) if (e.type === "PART_OF" || e.type === "SIGNAL" || e.type === "LINE" || (e.type === "LABEL_OF" && o.text)) links.push(e);
+  const keep = G.nodes.filter(n => !isC(n.id) && (o.text || n.label !== "Text"));
   // 초기 위치: 도면 좌표를 엣지 길이 ~90이 되도록 스케일
   const ds = links.filter(l => l.type === "PIPE").map(l => { const a = nodeById.get(l.from), b = nodeById.get(l.to); return a && b && a.x != null && b.x != null ? Math.hypot(a.x - b.x, a.y - b.y) : 0; }).filter(d => d > 0).sort((a, b) => a - b);
   const scale = ds.length ? 90 / ds[Math.floor(ds.length / 2)] : 1;
@@ -799,7 +925,7 @@ function buildDisplay() {
   });
   const pairs = new Map();
   for (const l of L) {
-    l.k = 0.7 / Math.min(deg.get(l.s.id), deg.get(l.t.id)); l.len = l.e.type === "PART_OF" ? l.s.r + l.t.r + 18 : l.s.r + l.t.r + 70;
+    l.k = 0.7 / Math.min(deg.get(l.s.id), deg.get(l.t.id)); l.len = l.e.type === "PART_OF" ? l.s.r + l.t.r + 18 : l.e.type === "LABEL_OF" ? l.s.r + l.t.r + 8 : l.s.r + l.t.r + 70;
     const key = [l.s.id, l.t.id].sort().join("|"); if (!pairs.has(key)) pairs.set(key, []); pairs.get(key).push(l);
   }
   // 같은 두 노드 사이 엣지가 여러 개면 곡선으로 벌려 그림
@@ -876,30 +1002,18 @@ function drawGraph() {
   ctx.font = "10px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
   for (const l of GD.links) {
     const e = l.e, P = linkPath(l); if (!P) continue;
-    const isPipe = e.type === "PIPE", lineKey = e.attr_LineNumber || e.system_id;
+    const isPipe = e.type === "PIPE", lineKey = e.attr_LineNumber || e.system_id, st = EDGE_STYLE[e.type] || EDGE_STYLE.LINE;
     const on = !dim || (isPipe && hiSeg && (e.segment_id === hiSeg || (hiLine && lineKey === hiLine))) || (hiNodes && (l.s.id === sel.item.id || l.t.id === sel.item.id));
     const isSel = sel && sel.type === "edge" && (sel.item === e || sel.item.id === e.id);
     ctx.globalAlpha = on ? 1 : 0.12;
-    ctx.strokeStyle = isSel ? "#ffffff" : !isPipe ? "#6b7280" : (o.color ? lineColor(lineKey) : "#a5abb6");
-    ctx.lineWidth = isSel ? 3 : (e === hover ? 2.6 : 1.6);
-    ctx.setLineDash(e.virtual ? [5, 4] : !isPipe ? [2, 3] : []);
+    ctx.strokeStyle = ctx.fillStyle = isSel ? "#ffffff" : edgeColor(e, o);
+    ctx.lineWidth = isSel ? st.w + 1.5 : (e === hover ? st.w + 1 : st.w);
+    ctx.setLineDash(e.virtual ? [5, 4] : st.dash);
     ctx.beginPath(); ctx.moveTo(...P.p0);
     if (P.curved) ctx.quadraticCurveTo(P.c[0], P.c[1], P.p1[0], P.p1[1]); else ctx.lineTo(...P.p1);
     ctx.stroke(); ctx.setLineDash([]);
-    if (o.arrow && isPipe) {
-      const s = 7, [x1, y1] = P.p1, ux = P.ux, uy = P.uy; ctx.fillStyle = ctx.strokeStyle; ctx.beginPath();
-      ctx.moveTo(x1 + ux * 2, y1 + uy * 2); ctx.lineTo(x1 - ux * s - uy * s * 0.55, y1 - uy * s + ux * s * 0.55); ctx.lineTo(x1 - ux * s + uy * s * 0.55, y1 - uy * s - ux * s * 0.55); ctx.closePath(); ctx.fill();
-    }
-    if (o.label && P.len > 90) {
-      const txt = isPipe ? (e.attr_LineNumber || e.line_tag || "PIPE") + (e.virtual ? " (가상)" : "") + (e.bends_merged ? ` (꺾임 ${e.bends_merged})` : "") : "PART_OF";
-      let ang = P.ang; if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
-      ctx.save(); ctx.translate(P.mid[0], P.mid[1]); ctx.rotate(ang);
-      ctx.font = "10px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
-      const w = ctx.measureText(txt).width + 8;
-      ctx.fillStyle = "#0f1115"; ctx.fillRect(-w / 2, -7, w, 14);
-      ctx.fillStyle = on ? "#c9cfdb" : "#555"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, 0, 0);
-      ctx.restore();
-    }
+    if (o.arrow && e.type !== "PART_OF" && e.type !== "LABEL_OF") arrowHead(P.p1[0], P.p1[1], P.ux, P.uy, isPipe ? 7 : 5);
+    if (o.label && e.type !== "PART_OF" && e.type !== "LABEL_OF" && P.len > 90) edgeText(edgeLabel(e), P.mid[0], P.mid[1], P.ang, on);
   }
   ctx.globalAlpha = 1;
   for (const d of GD.nodes) {
@@ -908,6 +1022,16 @@ function drawGraph() {
     const isSel = sel && sel.type === "node" && sel.item === n;
     ctx.globalAlpha = on ? 1 : 0.18;
     const c = labelColor(n);
+    if (n.label === "Text") {
+      const fs = Math.max(7, Math.min(11, 10 * Math.sqrt(view.s)));
+      ctx.font = `${fs}px ${FONT}`;
+      let txt = n.text; if (txt.length > 24) txt = txt.slice(0, 23) + "…";
+      const w = ctx.measureText(txt).width + 10, h = fs + 6;
+      ctx.fillStyle = isSel ? "#ffffff" : n === hover ? "#fde68a" : "#e5e7eb";
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2) : ctx.rect(x - w / 2, y - h / 2, w, h); ctx.fill();
+      ctx.fillStyle = "#111"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y); ctx.textBaseline = "alphabetic";
+      continue;
+    }
     if (isSel || n === hover) { ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.fillStyle = isSel ? "#ffffff88" : "#ffffff33"; ctx.fill(); }
     ctx.beginPath(); ctx.arc(x, y, Math.max(r, n.label === "Tee" ? 3.5 : 2.5), 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = "#00000055"; ctx.stroke();
@@ -943,13 +1067,16 @@ function hitTestGraph(sx, sy) {
   return eb;
 }
 function updateLegend() {
-  const g = mode === "graph";
-  $("glegend").style.display = g ? "flex" : "none"; $("dlegend").style.display = g ? "none" : "grid";
-  if (!g || !GD) return;
+  if (!G) return;
+  const g = mode === "graph" && GD, o = opt();
+  $("dlegend").style.display = mode === "graph" ? "none" : "block";
+  const ns = g ? GD.nodes.map(d => d.n) : G.nodes.filter(n => (o.bend || !(n.label === "Tee" && n.tee_kinds === "bend")) && (o.text || n.label !== "Text"));
+  const es = g ? GD.links.map(l => l.e) : G.edges;
   const cnt = new Map();
-  for (const d of GD.nodes) { const k = d.n.label === "Tee" ? (d.n.tee_kinds.includes("branch") ? "Tee (분기)" : "Tee (꺾임)") : d.n.label; cnt.set(k, [(cnt.get(k) || [0])[0] + 1, labelColor(d.n)]); }
+  for (const n of ns) { const k = n.label === "Tee" ? (n.tee_kinds.includes("branch") ? "Tee (분기)" : "Tee (꺾임)") : n.label; cnt.set(k, [(cnt.get(k) || [0])[0] + 1, labelColor(n)]); }
+  const ec = new Map(); for (const e of es) ec.set(e.type, (ec.get(e.type) || 0) + 1);
   $("glegend").innerHTML = [...cnt].sort((a, b) => b[1][0] - a[1][0]).map(([k, [c, col]]) => `<span style="background:${col}">${esc(k)} (${c})</span>`).join("")
-    + `<span style="background:#a5abb6">PIPE (${GD.links.filter(l => l.e.type === "PIPE").length})</span>`;
+    + [...ec].map(([k, c]) => `<span style="background:transparent;color:var(--muted);border:1px solid var(--line)">${esc(k)} (${c})</span>`).join("");
 }
 function setMode(m) {
   mode = m; view = views[m];
@@ -973,14 +1100,14 @@ function showDetail() {
     }).join("");
   let extra = "";
   if (sel.type === "node") {
-    const conns = G.edges.filter(e => e.type === "PIPE" && (e.from === it.id || e.to === it.id));
-    extra = `<h3 style="margin-top:12px">연결된 파이프 (${conns.length})</h3>` + conns.map(e => {
+    const conns = G.edges.filter(e => e.from === it.id || e.to === it.id);
+    extra = `<h3 style="margin-top:12px">연결 (${conns.length})</h3>` + conns.map(e => {
       const other = nodeById.get(e.from === it.id ? e.to : e.from) || {};
-      return `<div><span class="link" data-node="${esc(other.id)}">${e.from === it.id ? "→" : "←"} ${esc(other.tag || other.label || other.id)}</span> <span style="color:var(--muted)">${esc(e.attr_LineNumber || e.line_tag || e.segment_id)}${e.virtual ? " (가상)" : ""}</span></div>`;
+      return `<div><span class="link" data-node="${esc(other.id)}">${e.from === it.id ? "→" : "←"} ${esc(other.label === "Text" ? '"' + other.text + '"' : (other.tag || other.label || other.id))}</span> <span style="color:var(--muted)">${esc(e.type)} · ${esc(edgeLabel(e))}</span></div>`;
     }).join("");
   }
-  const title = sel.type === "node" ? (it.tag || it.label) : (it.attr_LineNumber || it.line_tag || it.segment_id);
-  const sub = sel.type === "node" ? `${it.label} · ${it.kind}` : `PIPE · ${it.segment_id}${it.virtual ? " · 가상" : ""}`;
+  const title = sel.type === "node" ? (it.label === "Text" ? it.text : (it.tag || it.label)) : edgeLabel(it);
+  const sub = sel.type === "node" ? `${it.label} · ${it.kind}` : `${it.type}${it.segment_id ? " · " + it.segment_id : ""}${it.virtual ? " · 가상" : ""}`;
   d.innerHTML = `<div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div><table>${rows}</table>${extra}`;
   d.querySelectorAll("[data-node]").forEach(a => a.onclick = () => selectNode(a.dataset.node, true));
 }
@@ -1018,7 +1145,7 @@ cv.addEventListener("pointermove", e => {
   if (item !== hover) { hover = item; draw(); }
   if (h) {
     tip.style.display = "block"; tip.style.left = sx + 14 + "px"; tip.style.top = sy + 10 + "px";
-    tip.textContent = h.type === "node" ? `${h.item.tag || h.item.label} (${h.item.label})` : `${h.item.attr_LineNumber || h.item.line_tag || h.item.segment_id}${h.item.attr_NominalDiameter ? " · " + h.item.attr_NominalDiameter : ""}`;
+    tip.textContent = h.type === "node" ? (h.item.label === "Text" ? `"${h.item.text}" (Text)` : `${h.item.tag || h.item.label} (${h.item.label})`) : `${h.item.attr_LineNumber || h.item.line_tag || h.item.segment_id}${h.item.attr_NominalDiameter ? " · " + h.item.attr_NominalDiameter : ""}`;
   } else tip.style.display = "none";
 });
 cv.addEventListener("pointerup", e => {
@@ -1034,7 +1161,7 @@ cv.addEventListener("wheel", e => {
 }, { passive: false });
 window.addEventListener("resize", resize);
 ["o-label", "o-arrow", "o-color"].forEach(id => $(id).onchange = draw);
-["o-bend", "o-virtual"].forEach(id => $(id).onchange = () => { if (mode === "graph" && G) { buildDisplay(); runSim(); updateLegend(); } draw(); });
+["o-bend", "o-virtual", "o-text"].forEach(id => $(id).onchange = () => { if (mode === "graph" && G) { buildDisplay(); runSim(); } updateLegend(); draw(); });
 $("m-drawing").onclick = () => setMode("drawing");
 $("m-graph").onclick = () => setMode("graph");
 $("relayout").onclick = () => { if (G) { GD = null; buildDisplay(); runSim(); fit(); } };
@@ -1045,7 +1172,7 @@ $("q").addEventListener("keydown", e => {
   if (e.key !== "Enter" || !G) return;
   const q = e.target.value.trim().toLowerCase(); if (!q) return;
   const n = G.nodes.find(n => [n.tag, n.id, n.source_id].some(v => v && String(v).toLowerCase() === q))
-        || G.nodes.find(n => [n.tag, n.id].some(v => v && String(v).toLowerCase().includes(q)));
+        || G.nodes.find(n => [n.tag, n.id, n.text].some(v => v && String(v).toLowerCase().includes(q)));
   if (n) return selectNode(n.id, true);
   const ed = G.edges.find(ed => ed.type === "PIPE" && [ed.attr_LineNumber, ed.line_tag, ed.segment_id].some(v => v && String(v).toLowerCase().includes(q)));
   if (ed) { sel = { type: "edge", item: ed }; showDetail(); draw(); }
@@ -1067,7 +1194,7 @@ function loadFile(file) {
       fileStem = file.name.replace(/\.[^.]+$/, "");
       nodeById = new Map(G.nodes.map(n => [n.id, n]));
       bounds = computeBounds(); sel = null; hover = null; lineColors = new Map();
-      GD = null; views.drawing.fitted = views.graph.fitted = false;
+      GD = null; views.drawing.fitted = views.graph.fitted = false; computeTagged();
       if (mode === "graph") { buildDisplay(); runSim(); }
       updateLegend(); view.fitted = true;
       const pe2 = G.edges.filter(e => e.type === "PIPE");

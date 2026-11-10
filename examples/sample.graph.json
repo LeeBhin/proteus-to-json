@@ -1,7 +1,7 @@
 {
   "drawing": "P-001",
   "summary": {
-    "nodes": 15,
+    "nodes": 16,
     "edges": 15,
     "pipe_edges": 12,
     "tees": 7,
@@ -12,6 +12,9 @@
     "centerlines_unassigned": 0,
     "component_tees": 0,
     "inferred_connection_ends": 0,
+    "line_edges": 0,
+    "texts": 1,
+    "lines_unconnected": 0,
     "segments_without_centerline": 1,
     "tol": 0.1029619832753818,
     "pipe_ends": 0
@@ -256,6 +259,19 @@
       "tee_source": "geometry",
       "x": 230.0,
       "y": 150.0,
+      "drawing": "P-001"
+    },
+    {
+      "id": "P-001:TEXT_0",
+      "label": "Text",
+      "kind": "Text",
+      "text": "NOTE 1",
+      "x": 20.0,
+      "y": 30.0,
+      "height": 2.5,
+      "rotation_deg": 0.0,
+      "justification": null,
+      "owner_id": null,
       "drawing": "P-001"
     }
   ],

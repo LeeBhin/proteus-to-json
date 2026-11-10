@@ -184,6 +184,58 @@ def parse_connection_points(el):
     }
 
 
+def eid(el):
+    """요소 ID: ID 속성, 없으면 PersistentID의 Identifier"""
+    v = attr(el, "ID")
+    if v:
+        return v
+    pid = child(el, "PersistentID")
+    return attr(pid, "Identifier") if pid is not None else None
+
+
+SIGNAL_RE = re.compile(r"signal|information|instrument|measur|actuat", re.I)
+
+
+def is_line_el(el):
+    """선 요소(계기 신호선 등): 자기 CenterLine/Coordinate를 갖고 Position이 없는 요소 -> 심볼이 아니라 엣지"""
+    tag = local(el.tag)
+    if tag in NON_SYMBOL_TAGS or child(el, "Position") is not None:
+        return False
+    if child(el, "CenterLine") is not None or child(el, "Coordinate") is not None:
+        return True
+    return bool(re.search(r"(Line|Flow)$", tag)) and child(el, "Connection") is not None
+
+
+def fix_extent(ext, pos, scale):
+    """Extent가 위치(Location)와 동떨어져 있으면 심볼 로컬 좌표로 보고 위치/회전/배율/반전을 적용해 도면 좌표로 변환"""
+    if not ext or not pos or ext.get("width") is None:
+        return ext
+    loc = _xy(pos.get("location"))
+    mn, mx = _xy(ext.get("min")), _xy(ext.get("max"))
+    if not loc or not mn or not mx:
+        return ext
+    w, h = mx[0] - mn[0], mx[1] - mn[1]
+    pad = max(w, h) * 0.5 + 1e-9
+    if mn[0] - pad <= loc[0] <= mx[0] + pad and mn[1] - pad <= loc[1] <= mx[1] + pad:
+        return ext                                    # 이미 도면 좌표
+    sx = (scale or {}).get("x") if isinstance((scale or {}).get("x"), (int, float)) and (scale or {}).get("x") else 1
+    sy = (scale or {}).get("y") if isinstance((scale or {}).get("y"), (int, float)) and (scale or {}).get("y") else 1
+    ang = math.radians(pos.get("rotation_deg") or 0)
+    ca, sa = math.cos(ang), math.sin(ang)
+    pts = []
+    for x, y in ((mn[0], mn[1]), (mx[0], mn[1]), (mn[0], mx[1]), (mx[0], mx[1])):
+        x, y = x * sx, y * sy
+        if pos.get("mirrored"):
+            x = -x
+        pts.append((loc[0] + x * ca - y * sa, loc[1] + x * sa + y * ca))
+    x0, y0 = min(p[0] for p in pts), min(p[1] for p in pts)
+    x1, y1 = max(p[0] for p in pts), max(p[1] for p in pts)
+    r6 = lambda v: round(v, 6)
+    return {"min": {"x": r6(x0), "y": r6(y0), "z": None}, "max": {"x": r6(x1), "y": r6(y1), "z": None},
+            "width": r6(x1 - x0), "height": r6(y1 - y0), "center": {"x": r6((x0 + x1) / 2), "y": r6((y0 + y1) / 2)},
+            "local": True, "local_min": ext.get("min"), "local_max": ext.get("max")}
+
+
 def is_virtual(item):
     pid = (item.get("persistent_id") or {}).get("identifier") or ""
     return "virtual" in pid.lower() or "virtual" in str(item.get("component_class") or "").lower()
@@ -198,13 +250,14 @@ class ProteusParser:
         self.symbols, self.pipes, self.connections, self.texts = [], [], [], []
         self.by_id = {}
         self.seg_el = {}      # segment id -> XML element (그래프 변환용)
+        self.lines, self.line_by_el = [], {}
         self.sys_segs = {}    # system id -> [segment id]
 
     def owner_id(self, el):
         p = self.parent.get(el)
         while p is not None:
-            if attr(p, "ID"):
-                return attr(p, "ID")
+            if eid(p) and local(p.tag) not in ("PersistentID",):
+                return eid(p)
             p = self.parent.get(p)
         return None
 
@@ -228,7 +281,9 @@ class ProteusParser:
                 self._connection(el)
             elif tag == "Text":
                 self._text(el)
-            elif tag not in NON_SYMBOL_TAGS and attr(el, "ID") and (
+            elif is_line_el(el) and eid(el):
+                self._line(el, tag)
+            elif tag not in NON_SYMBOL_TAGS and eid(el) and (
                 child(el, "Position") is not None or child(el, "Extent") is not None
                 or attr(el, "ComponentClass") is not None
             ):
@@ -252,11 +307,13 @@ class ProteusParser:
                 "pipes": len(self.pipes),
                 "connections": len(self.connections),
                 "virtual_connections": sum(1 for c in self.connections if c["virtual"]),
+                "lines": len(self.lines),
                 "texts": len(self.texts),
             },
             "symbols": self.symbols,
             "pipes": self.pipes,
             "connections": self.connections,
+            "lines": self.lines,
             "texts": self.texts,
         }
 
@@ -268,16 +325,17 @@ class ProteusParser:
         return dict(sorted(out.items(), key=lambda kv: -kv[1]))
 
     def _symbol(self, el, tag):
+        position, scale = parse_position(el), xyz(child(el, "Scale"))
         item = {
-            "id": attr(el, "ID"),
+            "id": eid(el),
             "type": tag,                                   # Equipment / PipingComponent / Nozzle / ...
             "component_class": attr(el, "ComponentClass"), # 세부 종류 (GateValve 등)
             "component_name": attr(el, "ComponentName"),   # 심볼 라이브러리 이름
             "tag_name": attr(el, "TagName"),
             "parent_id": self.owner_id(el),                # 노즐 -> 기기, 부품 -> 세그먼트
-            "position": parse_position(el),
-            "extent": parse_extent(el),
-            "scale": xyz(child(el, "Scale")),
+            "position": position,
+            "extent": fix_extent(parse_extent(el), position, scale),
+            "scale": scale,
             "presentation": parse_presentation(el),
             "persistent_id": parse_persistent_id(el),
             "attributes": parse_generic_attributes(el),
@@ -299,8 +357,8 @@ class ProteusParser:
                     "points": [xyz(c) for c in children(cl, "Coordinate")],
                 })
         item = {
-            "id": attr(el, "ID"),
-            "system_id": attr(system, "ID") if system is not None else None,
+            "id": eid(el),
+            "system_id": eid(system) if system is not None else None,
             "component_class": attr(el, "ComponentClass"),
             "tag_name": attr(el, "TagName") or attr(system, "TagName"),
             "persistent_id": parse_persistent_id(el),
@@ -317,7 +375,27 @@ class ProteusParser:
         self.pipes.append(item)
         self.by_id[item["id"]] = item
 
+    def _line(self, el, tag):
+        pts = []
+        for cl in [el] + children(el, "CenterLine"):
+            pts += [q for q in (xyz(c) for c in children(cl, "Coordinate")) if q]
+        item = {
+            "id": eid(el), "type": tag, "kind": "SIGNAL" if SIGNAL_RE.search(tag) else "LINE",
+            "component_class": attr(el, "ComponentClass"), "tag_name": attr(el, "TagName"),
+            "persistent_id": parse_persistent_id(el), "attributes": parse_generic_attributes(el),
+            "points": pts, "from_id": None, "from_node": None, "to_id": None, "to_node": None,
+        }
+        self.lines.append(item)
+        self.line_by_el[el] = item
+
     def _connection(self, el):
+        owner = self.parent.get(el)
+        if owner in self.line_by_el:                 # 선 요소(신호선 등)의 연결
+            ln = self.line_by_el[owner]
+            if ln["from_id"] is None and ln["to_id"] is None:
+                ln.update(from_id=attr(el, "FromID"), from_node=num(attr(el, "FromNode")),
+                          to_id=attr(el, "ToID"), to_node=num(attr(el, "ToNode")))
+            return
         seg = self.ancestor(el, "PipingNetworkSegment")
         self.connections.append({
             "segment_id": attr(seg, "ID") if seg is not None else self.owner_id(el),
@@ -329,11 +407,23 @@ class ProteusParser:
 
     def _text(self, el):
         pos = parse_position(el)
+        sym_id = None                                  # 텍스트가 속한 가장 가까운 심볼
+        p = self.parent.get(el)
+        while p is not None:
+            pid = eid(p) if local(p.tag) != "PersistentID" else None
+            if pid and pid in self.by_id and "type" in self.by_id[pid] and pid not in self.seg_el:
+                sym_id = pid
+                break
+            p = self.parent.get(p)
         self.texts.append({
             "string": attr(el, "String"),
             "owner_id": self.owner_id(el),
+            "symbol_id": sym_id,
             "location": pos["location"] if pos else None,
+            "rotation_deg": pos.get("rotation_deg") if pos else None,
             "height": num(attr(el, "Height")),
+            "width": num(attr(el, "Width")),
+            "justification": attr(el, "Justification"),
             "presentation": parse_presentation(el),
         })
 
@@ -574,9 +664,11 @@ def build_graph(p, data, tol=None, include_geometry=False):
         pts = [xy for xy in (_xy(xyz(c)) for c in children(cl, "Coordinate")) if xy]
         if not pts:
             continue
+        if p.parent.get(cl) in p.line_by_el:          # 신호선 등 선 요소의 CenterLine은 제외
+            continue
         owner = p.ancestor(cl, "PipingNetworkSegment")
-        if owner is not None and attr(owner, "ID") in seg_lines:
-            seg_lines[attr(owner, "ID")].append(pts)
+        if owner is not None and eid(owner) in seg_lines:
+            seg_lines[eid(owner)].append(pts)
             continue
         outside_lines += 1
         ref = parent_ref(cl)
@@ -593,9 +685,9 @@ def build_graph(p, data, tol=None, include_geometry=False):
                 unassigned_lines += 1
 
     def seg_comps(seg_id, el):
-        return [attr(c, "ID") for c in el.iter()
-                if attr(c, "ID") in sym and p.ancestor(c, "PipingNetworkSegment") is el
-                and sym[attr(c, "ID")]["parent_id"] == seg_id]
+        return [eid(c) for c in el.iter()
+                if local(c.tag) != "PersistentID" and eid(c) in sym and p.ancestor(c, "PipingNetworkSegment") is el
+                and sym[eid(c)]["parent_id"] == seg_id]
 
     # System만 가리키는 CenterLine은 부품/연결 위치가 가장 가까운 세그먼트에 배정
     for sref, lines in sys_lines.items():
@@ -813,6 +905,42 @@ def build_graph(p, data, tol=None, include_geometry=False):
                 k += 1
             cur, geom = e[1], [e[2]] if e[2] else []
 
+    # 6) 텍스트 -> Text 노드 (+ 심볼에 속하면 LABEL_OF 엣지)
+    for i, t in enumerate(data.get("texts", [])):
+        if not t.get("string"):
+            continue
+        loc = _xy(t.get("location"))
+        t_id = nid(f"TEXT_{i}")
+        add_node(t_id, "Text", {"kind": "Text", "text": t["string"], "x": loc[0] if loc else None, "y": loc[1] if loc else None,
+                                "height": t.get("height"), "rotation_deg": t.get("rotation_deg"),
+                                "justification": t.get("justification"), "owner_id": t.get("owner_id"), "drawing": dname})
+        if t.get("symbol_id") in sym:
+            edges.append({"id": f"{t_id}>LABEL_OF", "type": "LABEL_OF", "from": t_id, "to": nid(t["symbol_id"])})
+
+    # 7) 선 요소(계기 신호선 등) -> SIGNAL / LINE 엣지
+    lines_unconnected = 0
+    for ln in data.get("lines", []):
+        pts = [q for q in (_xy(pt) for pt in ln["points"]) if q]
+        ends = []
+        for ref, idx, near in ((ln["from_id"], ln["from_node"], pts[0] if pts else None),
+                               (ln["to_id"], ln["to_node"], pts[-1] if pts else None)):
+            if ref and ref not in sym and ref in pid2sym:
+                ref = pid2sym[ref]
+            if ref in sym:
+                ends.append((nid(ref), False))
+            elif near is not None and snap_sym(near, None, set()):
+                ends.append((nid(snap_sym(near, None, set())), True))
+            else:
+                ends.append(None)
+        if not ends[0] or not ends[1] or ends[0][0] == ends[1][0]:
+            lines_unconnected += 1
+            continue
+        e = {"id": nid(ln["id"]), "type": ln["kind"], "from": ends[0][0], "to": ends[1][0],
+             "line_type": ln["type"], "tag": ln["tag_name"], "drawing": dname,
+             "connection_inferred": ";".join(s for s, (_, inf) in zip(("start", "end"), ends) if inf) or None}
+        e.update(_flat_props(ln["attributes"], "attr_"))
+        edges.append(e)
+
     return {
         "drawing": dname,
         "summary": {
@@ -827,6 +955,9 @@ def build_graph(p, data, tol=None, include_geometry=False):
             "centerlines_unassigned": unassigned_lines,
             "component_tees": sum(1 for n in nodes.values() if n.get("tee_source") == "component"),
             "inferred_connection_ends": sum(len(sg["inferred"]) for sg in segs.values()),
+            "line_edges": sum(1 for e in edges if e["type"] in ("SIGNAL", "LINE")),
+            "texts": sum(1 for n in nodes.values() if n["label"] == "Text"),
+            "lines_unconnected": lines_unconnected,
             "segments_without_centerline": sum(1 for sg in segs.values() if not sg["poly"]),
             "tol": tol,
             "pipe_ends": sum(1 for n in nodes.values() if n["label"] == "PipeEnd"),

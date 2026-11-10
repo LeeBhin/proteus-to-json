@@ -8,7 +8,7 @@ AVEVA P&ID에서 내보낸 **Proteus XML (schema 3.3.x)** 을 JSON / CSV / 노�
 
 ## 뷰어
 `viewer.html`을 내려받아 브라우저로 열고 XML을 끌어다 놓으면 됩니다. 모드 두 개:
-- **도면** — 도면 좌표 그대로
+- **도면** — Neo4j 그래프를 도면 위에 겹친 것처럼: 노드는 실제 위치·크기(Extent), Tee는 원, 엣지는 노드 경계에서 끝나고 끝 화살표, 도면 텍스트는 실제 위치·크기·회전으로
 - **그래프** — Neo4j 스타일 노드/엣지 (힘 기반 배치, 노드 드래그로 고정, `재배치`로 초기화). 꺾임 Tee를 끄면 꺾임을 건너뛰어 엣지 하나로 합쳐 보여줌
 
 - 도면 좌표 그대로 표시: 노드는 Extent 크기의 사각형(크기 없으면 점선), Tee는 원 · 드래그 이동 · 휠 확대
@@ -37,14 +37,18 @@ Windows에서 `python`이 안 되면 `py`를 쓰세요.
 
 **노드**
 - 기기(Equipment), 노즐(Nozzle), 배관 부품(밸브 등), 계기
+- `Text` — 도면 텍스트 (내용, 위치, 높이, 회전, 정렬)
 - `Tee` — 파이프끼리 만나는 지점. `tee_kinds`: `branch`(분기/파이프 간 연결), `bend`(도면상 꺾임)
 - `PipeEnd` — 연결 대상이 없는 파이프 끝
 
 **엣지**
 - `PIPE` — 노드와 노드 사이의 배관 구간. 라인 속성(`attr_*`), `segment_id`, `system_id`, `flow`, `virtual`, `length`
 - `PART_OF` — 노즐 → 기기
+- `SIGNAL` / `LINE` — 계기 신호선 등 선 요소 (자기 Connection, 없으면 끝점 좌표로 근처 심볼에 연결)
+- `LABEL_OF` — 텍스트 → 그 텍스트가 속한 심볼
 
 변환 규칙
+0. 요소 ID는 `ID` 속성, 없으면 PersistentID의 Identifier를 씁니다. Position 없이 자기 CenterLine을 가진 요소(신호선 등)는 심볼이 아니라 엣지로 봅니다. Extent가 위치와 동떨어져 있으면 심볼 로컬 좌표로 보고 위치·회전·배율·반전을 적용해 도면 좌표로 바꿉니다.
 1. 세그먼트의 CenterLine들을 좌표 기준으로 이어 하나의 경로로 만듭니다. 세그먼트 밖에 있는 CenterLine은 parent id(속성 또는 GenericAttribute, ID 또는 PersistentID)로 세그먼트를 찾아 붙입니다.
 2. 경로 위에 부품(밸브 등)과 분기 Tee를 위치(투영)로 끼워 넣습니다.
 3. 방향이 바뀌는 꼭짓점은 꺾임 Tee 노드가 됩니다. (일직선 위의 점은 노드가 되지 않음)
