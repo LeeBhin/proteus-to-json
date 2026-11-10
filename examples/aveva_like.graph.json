@@ -522,6 +522,7 @@
       "from": "WW-01:5A01",
       "to": "WW-01:1A01",
       "line_type": "SignalLine",
+      "signal_type": "Electric",
       "tag": null,
       "drawing": "WW-01",
       "connection_inferred": null

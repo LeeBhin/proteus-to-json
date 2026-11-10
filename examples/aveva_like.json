@@ -1122,7 +1122,7 @@
       "id": "5A10",
       "type": "SignalLine",
       "kind": "SIGNAL",
-      "component_class": "SignalLine",
+      "component_class": "Electric",
       "tag_name": null,
       "persistent_id": {
         "identifier": "5A10",

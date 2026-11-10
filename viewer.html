@@ -160,6 +160,7 @@ const SIGNAL_RE = /signal|information|instrument|measur|actuat/i;
 const ANNOTATION_TAGS = new Set(["PipeFlowArrow", "InsulationSymbol"]);   // 노드로 만들지 않는 표시용 심볼
 const GEOM_LIST_TAGS = new Set(["PolyLine", "Polyline", "Line", "CenterLine", "Shape"]);
 const CENTERLINE_RE = /^center[ _-]?line$/i;
+const SIGNAL_CLASS_RE = /^(electric|electrical|pneumatic|hydraulic|software|data|capillary|electromagnetic|sonic|radio|mechanical|guided ?electromagnetic|unguided ?electromagnetic|signal.*)$/i;
 // 배관/신호선 형상을 담는 요소: CenterLine 요소, 또는 <Component ComponentClass="CenterLine">
 const isGeomCarrier = el => tagOf(el) === "CenterLine" || (tagOf(el) === "Component" && CENTERLINE_RE.test(attr(el, "ComponentClass") || ""));
 function pointLists(el) {
@@ -181,8 +182,11 @@ function parseCrossPage(el) { const c = kid(el, "CrossPageConnection"); return c
 // 선 요소(SignalLine 등): Position 없이 자기 선 형상을 가진 요소 -> 심볼이 아니라 엣지
 function isLineEl(el) {
   const t = tagOf(el);
-  if (NON_SYMBOL.has(t) || t === "Component" || kid(el, "Position")) return false;
-  if (t === "SignalLine" || /(Signal|Information)(Line|Flow)$/.test(t)) return true;
+  if (NON_SYMBOL.has(t) || t === "Component") return false;
+  if (t === "SignalLine" || /(Signal|Information)(Line|Flow)$/.test(t)) return true;   // 신호선은 Position이 있어도 선
+  const hasGeom = ["CenterLine", "PolyLine", "Polyline"].some(k => kid(el, k)) || Array.from(el.children).some(isGeomCarrier);
+  if (hasGeom && SIGNAL_CLASS_RE.test(attr(el, "ComponentClass") || "")) return true;   // ComponentClass가 신호 종류(Electric 등)
+  if (kid(el, "Position")) return false;
   if (["CenterLine", "Coordinate", "PolyLine", "Polyline"].some(k => kid(el, k))) return true;
   if (Array.from(el.children).some(isGeomCarrier)) return true;
   return /(Line|Flow)$/.test(t) && !!kid(el, "Connection");
@@ -298,7 +302,7 @@ function parseProteus(doc, fileName) {
         rotation_deg: num(attr(el, "TextAngle")) != null ? num(attr(el, "TextAngle")) : (pos ? pos.rotation_deg ?? null : null), height: num(attr(el, "Height")), width: num(attr(el, "Width")), justification: attr(el, "Justification") });
     } else if (isLineEl(el) && eidOf(el)) {
       const pts = pointLists(el).flat();
-      const it = { id: eidOf(el), type: t, kind: SIGNAL_RE.test(t) ? "SIGNAL" : "LINE", component_class: attr(el, "ComponentClass"), tag_name: attr(el, "TagName"),
+      const it = { id: eidOf(el), type: t, kind: SIGNAL_RE.test(t) || SIGNAL_CLASS_RE.test(attr(el, "ComponentClass") || "") ? "SIGNAL" : "LINE", component_class: attr(el, "ComponentClass"), tag_name: attr(el, "TagName"),
         persistent_id: parsePid(el), attributes: parseAttrs(el), points: pts, from_id: null, from_node: null, to_id: null, to_node: null };
       lines.push(it); lineByEl.set(el, it);
     } else if (t === "Component" || isGeomCarrier(el) || inGeom(el)) {
@@ -643,7 +647,7 @@ function buildGraph(data, tol = null) {
       return null;
     });
     if (!ends[0] || !ends[1] || ends[0][0] === ends[1][0]) { linesUnconnected++; continue; }
-    edges.push({ id: nid(ln.id), type: ln.kind, from: ends[0][0], to: ends[1][0], line_type: ln.type, tag: ln.tag_name, drawing: dname,
+    edges.push({ id: nid(ln.id), type: ln.kind, from: ends[0][0], to: ends[1][0], line_type: ln.type, signal_type: ln.component_class ?? null, tag: ln.tag_name, drawing: dname,
       connection_inferred: ["start", "end"].filter((_, i) => ends[i][1]).join(";") || null, ...flatProps(ln.attributes, "attr_") });
   }
   const nl = [...nodes.values()];
@@ -741,7 +745,7 @@ function edgeColor(e, o) {
 }
 function edgeLabel(e) {
   if (e.type === "PIPE") return (e.attr_LineNumber || e.line_tag || "PIPE") + (e.virtual ? " (가상)" : "") + (e.bends_merged ? ` (꺾임 ${e.bends_merged})` : "");
-  if (e.type === "SIGNAL" || e.type === "LINE") return e.tag || e.type;
+  if (e.type === "SIGNAL" || e.type === "LINE") return e.tag || (e.signal_type ? `${e.type} · ${e.signal_type}` : e.type);
   return e.type;
 }
 function arrowHead(x1, y1, ux, uy, s = 7) {

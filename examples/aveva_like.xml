@@ -184,9 +184,11 @@
     <Circle Radius="8"><Position><Location X="80" Y="420" Z="0"/></Position></Circle>
   </ProcessInstrument>
 
-  <SignalLine ComponentClass="SignalLine">
+  <SignalLine ComponentClass="Electric">
     <Presentation Layer="AS_INST" LineType="2" LineWeight="0.25" Color="White"/>
     <Extent><Min X="80" Y="350" Z="0"/><Max X="80" Y="412" Z="0"/></Extent>
+    <Position><Location X="80" Y="412" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <Scale X="1" Y="1" Z="1"/>
     <PersistentID Identifier="5A10" Context="WW-01"/>
     <PolyLine NumPoints="2"><Coordinate X="80" Y="412" Z="0"/><Coordinate X="80" Y="350" Z="0"/></PolyLine>
     <Connection FromID="5A01" ToID="1A01"/>

@@ -219,6 +219,9 @@ def eid(el):
 
 SIGNAL_RE = re.compile(r"signal|information|instrument|measur|actuat", re.I)
 CENTERLINE_RE = re.compile(r"^center[ _-]?line$", re.I)
+# 신호선 종류 (ComponentClass)
+SIGNAL_CLASS_RE = re.compile(r"^(electric|electrical|pneumatic|hydraulic|software|data|capillary|electromagnetic|sonic|radio|"
+                             r"mechanical|guided ?electromagnetic|unguided ?electromagnetic|signal.*)$", re.I)
 
 
 def is_geom_carrier(el):
@@ -245,10 +248,15 @@ def point_lists(el):
 def is_line_el(el):
     """선 요소(SignalLine 등): Position 없이 자기 선 형상을 가진 요소 -> 심볼이 아니라 엣지"""
     tag = local(el.tag)
-    if tag in NON_SYMBOL_TAGS or tag == "Component" or child(el, "Position") is not None:
+    if tag in NON_SYMBOL_TAGS or tag == "Component":
         return False
     if tag == "SignalLine" or re.search(r"(Signal|Information)(Line|Flow)$", tag):
-        return True
+        return True                                    # 신호선은 Position이 있어도 선
+    has_geom = any(child(el, t) is not None for t in ("CenterLine", "PolyLine", "Polyline")) or any(is_geom_carrier(c) for c in el)
+    if has_geom and SIGNAL_CLASS_RE.match(attr(el, "ComponentClass") or ""):
+        return True                                    # ComponentClass가 신호 종류(Electric 등)인 선
+    if child(el, "Position") is not None:
+        return False
     if any(child(el, t) is not None for t in ("CenterLine", "Coordinate", "PolyLine", "Polyline")):
         return True
     if any(is_geom_carrier(c) for c in el):
@@ -440,7 +448,8 @@ class ProteusParser:
     def _line(self, el, tag):
         pts = [q for lst in point_lists(el) for q in lst]
         item = {
-            "id": eid(el), "type": tag, "kind": "SIGNAL" if SIGNAL_RE.search(tag) else "LINE",
+            "id": eid(el), "type": tag,
+            "kind": "SIGNAL" if SIGNAL_RE.search(tag) or SIGNAL_CLASS_RE.match(attr(el, "ComponentClass") or "") else "LINE",
             "component_class": attr(el, "ComponentClass"), "tag_name": attr(el, "TagName"),
             "persistent_id": parse_persistent_id(el), "attributes": parse_generic_attributes(el),
             "points": pts, "from_id": None, "from_node": None, "to_id": None, "to_node": None,
@@ -1059,7 +1068,7 @@ def build_graph(p, data, tol=None, include_geometry=False):
             lines_unconnected += 1
             continue
         e = {"id": nid(ln["id"]), "type": ln["kind"], "from": ends[0][0], "to": ends[1][0],
-             "line_type": ln["type"], "tag": ln["tag_name"], "drawing": dname,
+             "line_type": ln["type"], "signal_type": ln.get("component_class"), "tag": ln["tag_name"], "drawing": dname,
              "connection_inferred": ";".join(s for s, (_, inf) in zip(("start", "end"), ends) if inf) or None}
         e.update(_flat_props(ln["attributes"], "attr_"))
         edges.append(e)
