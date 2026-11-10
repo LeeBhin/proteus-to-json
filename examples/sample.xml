@@ -60,12 +60,41 @@
         </ConnectionPoints>
       </PipingComponent>
       <CenterLine NumPoints="2"><Coordinate X="112" Y="200" Z="0"/><Coordinate X="195" Y="200" Z="0"/></CenterLine>
-      <CenterLine NumPoints="2"><Coordinate X="205" Y="200" Z="0"/><Coordinate X="298" Y="200" Z="0"/></CenterLine>
+      <CenterLine NumPoints="6"><Coordinate X="205" Y="200" Z="0"/><Coordinate X="250" Y="200" Z="0"/><Coordinate X="250" Y="230" Z="0"/><Coordinate X="280" Y="230" Z="0"/><Coordinate X="280" Y="200" Z="0"/><Coordinate X="298" Y="200" Z="0"/></CenterLine>
       <Connection FromID="NZ-1" FromNode="1" ToID="NZ-2" ToNode="1"/>
     </PipingNetworkSegment>
     <PipingNetworkSegment ID="SEG-2">
       <PersistentID Identifier="6449-VirtualPipeSeg" Context="P0001000"/>
       <Connection FromID="V-1" FromNode="2" ToID="NZ-2" ToNode="1"/>
+    </PipingNetworkSegment>
+  </PipingNetworkSystem>
+
+  <Equipment ID="EQ-3" ComponentClass="Vessel" ComponentName="VESSEL_H" TagName="V-301">
+    <Extent><Min X="210" Y="80" Z="0"/><Max X="250" Y="110" Z="0"/></Extent>
+    <Position><Location X="230" Y="95" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <Nozzle ID="NZ-3" ComponentClass="Nozzle" TagName="N1">
+      <Position><Location X="230" Y="110" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="0" Y="1" Z="0"/></Position>
+      <ConnectionPoints NumPoints="2" FlowIn="1" FlowOut="0">
+        <Node><Position><Location X="230" Y="110" Z="0"/></Position></Node>
+        <Node><Position><Location X="230" Y="112" Z="0"/></Position></Node>
+      </ConnectionPoints>
+    </Nozzle>
+  </Equipment>
+
+  <PipingNetworkSystem ID="PNS-2" TagName="2&quot;-P-1002-A1">
+    <GenericAttributes Set="LineData" Number="2">
+      <GenericAttribute Name="LineNumber" Format="string" Value="P-1002"/>
+      <GenericAttribute Name="NominalDiameter" Format="string" Value="2&quot;"/>
+    </GenericAttributes>
+    <PipingNetworkSegment ID="SEG-3">
+      <PersistentID Identifier="6450-PipeSeg" Context="P0001000"/>
+      <CenterLine NumPoints="3"><Coordinate X="150" Y="200" Z="0"/><Coordinate X="150" Y="150" Z="0"/><Coordinate X="230" Y="150" Z="0"/></CenterLine>
+      <PipingComponent ID="V-3" ComponentClass="GlobeValve" ComponentName="VALVE_GLOBE" TagName="HV-102">
+        <Extent><Min X="225" Y="125" Z="0"/><Max X="235" Y="135" Z="0"/></Extent>
+        <Position><Location X="230" Y="130" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="0" Y="-1" Z="0"/></Position>
+      </PipingComponent>
+      <CenterLine NumPoints="2"><Coordinate X="230" Y="150" Z="0"/><Coordinate X="230" Y="112" Z="0"/></CenterLine>
+      <Connection FromID="SEG-1" ToID="NZ-3" ToNode="1"/>
     </PipingNetworkSegment>
   </PipingNetworkSystem>
 </PlantModel>

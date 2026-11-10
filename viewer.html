@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proteus P&amp;ID Graph Viewer</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #e6e8ee; --muted: #8b93a7;
+    --accent: #4f8cff; --branch: #ff9f43; --bend: #6b7280; --end: #ef4444; --equip: #22c55e; --valve: #eab308; --nozzle: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.45 -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  #app { display: grid; grid-template-columns: 1fr 340px; height: 100%; }
+  #stage { position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas.dragging { cursor: grabbing; }
+  #drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  #drop .box { pointer-events: auto; border: 2px dashed var(--line); border-radius: 14px; padding: 36px 44px; text-align: center; background: rgba(23,26,33,.85); }
+  #drop.hidden { display: none; }
+  #drop.over .box { border-color: var(--accent); }
+  #drop h2 { margin: 0 0 6px; font-size: 18px; }
+  #drop p { margin: 0 0 16px; color: var(--muted); }
+  button, .btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; font: inherit; cursor: pointer; }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  button:hover { filter: brightness(1.1); }
+  aside { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  aside section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  aside h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 6px 8px; }
+  .stat b { display: block; font-size: 16px; }
+  .stat span { color: var(--muted); font-size: 11px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  label.chk { display: flex; gap: 5px; align-items: center; margin-right: 10px; cursor: pointer; }
+  input[type=search] { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 9px; font: inherit; }
+  #detail { flex: 1; overflow: auto; }
+  #detail table { width: 100%; border-collapse: collapse; }
+  #detail td { padding: 3px 0; vertical-align: top; border-bottom: 1px solid #1f232c; word-break: break-all; }
+  #detail td:first-child { color: var(--muted); width: 40%; padding-right: 8px; word-break: normal; }
+  #detail .title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  #detail .sub { color: var(--muted); margin-bottom: 8px; }
+  #detail .link { color: var(--accent); cursor: pointer; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; color: var(--muted); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 2px; }
+  #file-name { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; }
+  #tip { position: absolute; pointer-events: none; background: rgba(0,0,0,.8); padding: 4px 8px; border-radius: 6px; font-size: 12px; display: none; white-space: nowrap; }
+  #err { color: #fca5a5; margin-top: 6px; }
+  @media (max-width: 800px) { #app { grid-template-columns: 1fr; grid-template-rows: 60% 40%; } aside { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+    <div id="drop">
+      <div class="box">
+        <h2>Proteus XML을 올려주세요</h2>
+        <p>AVEVA P&amp;ID에서 내보낸 XML (schema 3.3.x)<br>파일을 여기로 끌어다 놓거나 선택하세요. 브라우저 안에서만 처리됩니다.</p>
+        <button id="pick">XML 선택</button>
+        <div id="err"></div>
+      </div>
+    </div>
+    <input type="file" id="file" accept=".xml,text/xml" hidden>
+  </div>
+  <aside>
+    <section>
+      <div class="row" style="justify-content:space-between">
+        <strong>P&amp;ID Graph</strong>
+        <div class="row">
+          <button class="ghost" id="open">열기</button>
+          <button class="ghost" id="fit">맞춤</button>
+        </div>
+      </div>
+      <div id="file-name">파일 없음</div>
+    </section>
+    <section>
+      <h3>요약</h3>
+      <div class="stats">
+        <div class="stat"><b id="s-nodes">0</b><span>노드</span></div>
+        <div class="stat"><b id="s-edges">0</b><span>파이프 엣지</span></div>
+        <div class="stat"><b id="s-tees">0</b><span>Tee</span></div>
+        <div class="stat"><b id="s-lines">0</b><span>라인</span></div>
+        <div class="stat"><b id="s-virtual">0</b><span>가상 엣지</span></div>
+        <div class="stat"><b id="s-ends">0</b><span>미연결 끝</span></div>
+      </div>
+    </section>
+    <section>
+      <h3>보기</h3>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="o-bend" checked>꺾임 Tee</label>
+        <label class="chk"><input type="checkbox" id="o-label" checked>태그</label>
+        <label class="chk"><input type="checkbox" id="o-virtual" checked>가상</label>
+        <label class="chk"><input type="checkbox" id="o-arrow" checked>흐름</label>
+        <label class="chk"><input type="checkbox" id="o-color" checked>라인별 색</label>
+      </div>
+      <div class="legend" style="margin-top:8px">
+        <span><i style="background:var(--equip)"></i>기기</span>
+        <span><i style="background:var(--valve)"></i>배관 부품</span>
+        <span><i style="background:var(--nozzle)"></i>노즐</span>
+        <span><i style="background:var(--branch);border-radius:50%"></i>분기 Tee</span>
+        <span><i style="background:var(--bend);border-radius:50%"></i>꺾임 Tee</span>
+        <span><i style="background:var(--end)"></i>미연결 끝</span>
+      </div>
+    </section>
+    <section>
+      <input type="search" id="q" placeholder="태그 / 라인번호 / ID 검색 (Enter)">
+    </section>
+    <section id="detail"><div class="sub">노드나 파이프를 클릭하면 정보가 나와요.<br>드래그: 이동 · 휠: 확대/축소</div></section>
+    <section>
+      <h3>내보내기</h3>
+      <div class="row">
+        <button class="ghost" id="dl-graph">graph.json</button>
+        <button class="ghost" id="dl-nodes">nodes.csv</button>
+        <button class="ghost" id="dl-edges">edges.csv</button>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Proteus XML -> 노드/엣지 그래프 (proteus_to_json.py --graph 와 같은 로직)
+   노드: 기기, 노즐, 배관 부품, 계기, Tee(bend/branch), PipeEnd
+   엣지: PIPE, PART_OF
+   ===================================================================== */
+const NON_SYMBOL = new Set(["PlantModel","PlantInformation","Drawing","Presentation","Extent","Min","Max","Position","Location","Axis","Reference","Scale","PersistentID","GenericAttributes","GenericAttribute","ConnectionPoints","Node","Connection","CenterLine","Coordinate","Line","PolyLine","Polyline","Text","Circle","Ellipse","Shape","TrimmedCurve","BsplineCurve","PipingNetworkSystem","PipingNetworkSegment","ShapeCatalogue","Association","Label","History","UnitsOfMeasure"]);
+const NUMERIC_FMT = new Set(["double","float","integer","int","number","real","decimal"]);
+
+const tagOf = el => el.localName || el.nodeName.split(":").pop();
+function attr(el, name) {
+  if (!el || !el.attributes) return null;
+  if (el.hasAttribute(name)) return el.getAttribute(name);
+  const low = name.toLowerCase();
+  for (const a of el.attributes) if ((a.localName || a.name).toLowerCase() === low) return a.value;
+  return null;
+}
+const kids = (el, name) => el ? Array.from(el.children).filter(c => tagOf(c) === name) : [];
+const kid = (el, name) => kids(el, name)[0] || null;
+const num = v => { if (v == null || v === "") return null; const f = Number(v); return Number.isFinite(f) ? f : v; };
+const xyz = el => el ? { x: num(attr(el, "X")), y: num(attr(el, "Y")), z: num(attr(el, "Z")) } : null;
+const XY = p => (p && typeof p.x === "number" && typeof p.y === "number") ? [p.x, p.y] : null;
+const hyp = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+function ancestor(el, name) { let p = el.parentElement; while (p) { if (tagOf(p) === name) return p; p = p.parentElement; } return null; }
+function ownerId(el) { let p = el.parentElement; while (p) { if (attr(p, "ID")) return attr(p, "ID"); p = p.parentElement; } return null; }
+
+function parseExtent(el) {
+  const e = kid(el, "Extent"); if (!e) return null;
+  const mn = xyz(kid(e, "Min")), mx = xyz(kid(e, "Max"));
+  if (!mn || !mx || typeof mn.x !== "number" || typeof mx.x !== "number") return { min: mn, max: mx };
+  return { min: mn, max: mx, width: mx.x - mn.x, height: mx.y - mn.y, center: { x: (mn.x + mx.x) / 2, y: (mn.y + mx.y) / 2 } };
+}
+function parsePosition(el) {
+  const p = kid(el, "Position"); if (!p) return null;
+  const out = { location: xyz(kid(p, "Location")), axis: xyz(kid(p, "Axis")), reference: xyz(kid(p, "Reference")) };
+  const r = out.reference;
+  if (r && typeof r.x === "number" && typeof r.y === "number") out.rotation_deg = +(((Math.atan2(r.y, r.x) * 180 / Math.PI) % 360 + 360) % 360).toFixed(3);
+  if (out.axis && typeof out.axis.z === "number") out.mirrored = out.axis.z < 0;
+  return out;
+}
+function parseAttrs(el) {
+  const res = {};
+  if (!el) return res;
+  for (const set of kids(el, "GenericAttributes")) {
+    const setName = attr(set, "Set");
+    for (const ga of kids(set, "GenericAttribute")) {
+      const name = attr(ga, "Name"); if (!name) continue;
+      const raw = attr(ga, "Value"), fmt = (attr(ga, "Format") || "").toLowerCase();
+      let val = NUMERIC_FMT.has(fmt) ? num(raw) : (fmt === "boolean" || fmt === "bool") ? ["true","1","yes"].includes(String(raw).toLowerCase()) : raw;
+      const units = attr(ga, "Units"); if (units) val = { value: val, units };
+      let key = name;
+      if (key in res && JSON.stringify(res[key]) !== JSON.stringify(val)) key = setName ? `${setName}.${name}` : `${name}#2`;
+      res[key] = val;
+    }
+  }
+  return res;
+}
+function parsePid(el) { const p = kid(el, "PersistentID"); return p ? { identifier: attr(p, "Identifier"), context: attr(p, "Context") } : null; }
+function parseCP(el) {
+  const cp = kid(el, "ConnectionPoints"); if (!cp) return null;
+  const fi = num(attr(cp, "FlowIn")), fo = num(attr(cp, "FlowOut"));
+  const nodes = kids(cp, "Node").map((n, i) => {
+    const loc = n.getElementsByTagNameNS("*", "Location")[0] || n.getElementsByTagName("Location")[0] || null;
+    let role = null; if (i === fi) role = "in"; if (i === fo) role = role ? "in/out" : "out";
+    return { index: i, id: attr(n, "ID"), type: attr(n, "Type"), location: xyz(loc), flow: role };
+  });
+  return { num_points: num(attr(cp, "NumPoints")), flow_in: fi, flow_out: fo, nodes };
+}
+const isVirtual = it => /virtual/i.test(((it.persistent_id || {}).identifier || "") + " " + (it.component_class || ""));
+
+function parseProteus(doc, fileName) {
+  const root = doc.documentElement;
+  const all = Array.from(root.getElementsByTagName("*"));
+  const info = all.find(e => tagOf(e) === "PlantInformation");
+  const drawing = all.find(e => tagOf(e) === "Drawing");
+  const symbols = [], pipes = [], connections = [], byId = {}, segEl = {}, sysSegs = {};
+  for (const el of all) {
+    const t = tagOf(el);
+    if (t === "PipingNetworkSegment") {
+      const sys = ancestor(el, "PipingNetworkSystem");
+      const sa = parseAttrs(sys), ga = parseAttrs(el);
+      const it = { id: attr(el, "ID"), system_id: sys ? attr(sys, "ID") : null, component_class: attr(el, "ComponentClass"),
+        tag_name: attr(el, "TagName") || attr(sys, "TagName"), persistent_id: parsePid(el), attributes: { ...sa, ...ga } };
+      it.virtual = isVirtual(it);
+      pipes.push(it); byId[it.id] = it; segEl[it.id] = el; (sysSegs[it.system_id] = sysSegs[it.system_id] || []).push(it.id);
+    } else if (t === "Connection") {
+      const seg = ancestor(el, "PipingNetworkSegment");
+      connections.push({ segment_id: seg ? attr(seg, "ID") : ownerId(el), from_id: attr(el, "FromID"), from_node: num(attr(el, "FromNode")),
+        to_id: attr(el, "ToID"), to_node: num(attr(el, "ToNode")) });
+    } else if (!NON_SYMBOL.has(t) && attr(el, "ID") && (kid(el, "Position") || kid(el, "Extent") || attr(el, "ComponentClass") != null)) {
+      const it = { id: attr(el, "ID"), type: t, component_class: attr(el, "ComponentClass"), component_name: attr(el, "ComponentName"),
+        tag_name: attr(el, "TagName"), parent_id: ownerId(el), position: parsePosition(el), extent: parseExtent(el),
+        persistent_id: parsePid(el), attributes: parseAttrs(el), connection_points: parseCP(el) };
+      it.virtual = isVirtual(it);
+      symbols.push(it); byId[it.id] = it;
+    }
+  }
+  const sym = Object.fromEntries(symbols.map(s => [s.id, s]));
+  const nodeRole = (id, idx) => { const s = sym[id]; if (!s || idx == null || !s.connection_points) return null; const n = s.connection_points.nodes.find(n => n.index === idx); return n ? n.flow : null; };
+  for (const c of connections) {
+    const fr = nodeRole(c.from_id, c.from_node), to = nodeRole(c.to_id, c.to_node);
+    c.flow_direction = (fr === "out" || to === "in") ? "from->to" : (fr === "in" || to === "out") ? "to->from" : null;
+  }
+  return {
+    source_file: fileName,
+    plant_information: info ? Object.fromEntries(Array.from(info.attributes).map(a => [a.localName || a.name, a.value])) : null,
+    drawing: drawing ? { name: attr(drawing, "Name"), extent: parseExtent(drawing) } : null,
+    symbols, pipes, connections, _segEl: segEl, _sysSegs: sysSegs,
+  };
+}
+
+function flatProps(d, prefix) {
+  const out = {};
+  for (const [k, v] of Object.entries(d || {})) {
+    const key = prefix + k;
+    if (v && typeof v === "object" && "value" in v) { out[key] = v.value; if (v.units) out[key + "_units"] = v.units; }
+    else if (v && typeof v === "object") out[key] = JSON.stringify(v);
+    else out[key] = v;
+  }
+  return out;
+}
+function distPointSeg(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+  const t = L2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+function isBend(prv, cur, nxt, eps = 1e-3) {
+  const v1 = [cur[0] - prv[0], cur[1] - prv[1]], v2 = [nxt[0] - cur[0], nxt[1] - cur[1]];
+  const n1 = Math.hypot(...v1), n2 = Math.hypot(...v2);
+  if (!n1 || !n2) return false;
+  const cross = (v1[0] * v2[1] - v1[1] * v2[0]) / (n1 * n2), dot = (v1[0] * v2[0] + v1[1] * v2[1]) / (n1 * n2);
+  return Math.abs(cross) > eps || dot < 0;
+}
+const fmtNum = v => String(+v.toFixed(6)).replace(/\.0+$/, "");
+
+function buildGraph(data, tol = 0.5) {
+  const dname = (data.drawing && data.drawing.name) || data.source_file.replace(/\.[^.]+$/, "");
+  const nid = raw => `${dname}:${raw}`;
+  const nodes = new Map(), edges = [];
+  const sym = Object.fromEntries(data.symbols.map(s => [s.id, s]));
+  const segInfo = Object.fromEntries(data.pipes.map(s => [s.id, s]));
+  const connOf = {}; for (const c of data.connections) if (!(c.segment_id in connOf)) connOf[c.segment_id] = c;
+  const addNode = (id, label, props) => { if (!nodes.has(id)) nodes.set(id, { id, label, ...props }); return id; };
+
+  for (const s of data.symbols) {
+    const pos = s.position || {}, ext = s.extent || {};
+    const loc = XY(pos.location) || XY(ext.center);
+    addNode(nid(s.id), s.component_class || s.type, {
+      kind: s.type, component_class: s.component_class, component_name: s.component_name, tag: s.tag_name, source_id: s.id,
+      x: loc ? loc[0] : null, y: loc ? loc[1] : null, rotation_deg: pos.rotation_deg ?? null, mirrored: pos.mirrored ?? null,
+      width: ext.width ?? null, height: ext.height ?? null, persistent_id: (s.persistent_id || {}).identifier || null, drawing: dname,
+      ...flatProps(s.attributes, "attr_"),
+    });
+  }
+  for (const s of data.symbols) if (s.parent_id in sym) edges.push({ id: `${nid(s.id)}>PART_OF`, type: "PART_OF", from: nid(s.id), to: nid(s.parent_id) });
+
+  const teeAt = new Map();
+  const tee = (xy, kind) => {
+    const key = `${Math.round(xy[0] / tol)},${Math.round(xy[1] / tol)}`;
+    if (teeAt.has(key)) { const n = nodes.get(teeAt.get(key)); if (!n.tee_kinds.split(";").includes(kind)) n.tee_kinds += ";" + kind; return teeAt.get(key); }
+    const id = nid(`TEE_${fmtNum(xy[0])}_${fmtNum(xy[1])}`);
+    teeAt.set(key, id); addNode(id, "Tee", { kind: "Tee", tee_kinds: kind, x: xy[0], y: xy[1], drawing: dname });
+    return id;
+  };
+  const symXY = (ref, idx) => {
+    const s = sym[ref]; if (!s) return null;
+    if (s.connection_points && idx != null) { const n = s.connection_points.nodes.find(n => n.index === idx); if (n && XY(n.location)) return XY(n.location); }
+    return XY((s.position || {}).location) || XY((s.extent || {}).center);
+  };
+  const chain = (lines, hint) => {
+    lines = lines.filter(l => l.length); if (!lines.length) return [];
+    const near = (l, p) => Math.min(hyp(l[0], p), hyp(l[l.length - 1], p));
+    let first;
+    if (hint) { let i = 0; lines.forEach((l, k) => { if (near(l, hint) < near(lines[i], hint)) i = k; }); first = lines.splice(i, 1)[0]; if (hyp(first[first.length - 1], hint) < hyp(first[0], hint)) first = first.slice().reverse(); }
+    else first = lines.shift();
+    const out = first.slice();
+    while (lines.length) {
+      const end = out[out.length - 1]; let i = 0;
+      lines.forEach((l, k) => { if (near(l, end) < near(lines[i], end)) i = k; });
+      let nx = lines.splice(i, 1)[0]; if (hyp(nx[nx.length - 1], end) < hyp(nx[0], end)) nx = nx.slice().reverse();
+      out.push(...nx);
+    }
+    return out;
+  };
+
+  const segs = {}, junctions = [];
+  for (const [segId, el] of Object.entries(data._segEl)) {
+    const lines = Array.from(el.getElementsByTagName("*")).filter(c => tagOf(c) === "CenterLine" && ancestor(c, "PipingNetworkSegment") === el)
+      .map(cl => kids(cl, "Coordinate").map(c => XY(xyz(c))).filter(Boolean));
+    const comps = Array.from(el.getElementsByTagName("*")).map(c => attr(c, "ID"))
+      .filter(id => id && sym[id] && sym[id].parent_id === segId);
+    const conn = connOf[segId] || {};
+    const sH = symXY(conn.from_id, conn.from_node), eH = symXY(conn.to_id, conn.to_node);
+    let poly = chain(lines, sH);
+    if (poly.length && !sH && eH && hyp(poly[0], eH) < hyp(poly[poly.length - 1], eH)) poly = poly.reverse();
+    const resolve = (ref, idx, near, side) => {
+      if (ref in sym) return ["node", nid(ref), symXY(ref, idx) || near];
+      if (!near) return null;
+      if (ref && (ref in data._segEl || ref in data._sysSegs)) { const t = tee(near, "branch"); junctions.push([ref, t, near, segId]); return ["node", t, near]; }
+      const e = nid(`END_${segId}_${side}`);
+      addNode(e, "PipeEnd", { kind: "PipeEnd", x: near[0], y: near[1], unresolved_ref: ref ?? null, drawing: dname });
+      return ["node", e, near];
+    };
+    const start = resolve(conn.from_id, conn.from_node, poly[0] || null, "start");
+    const end = resolve(conn.to_id, conn.to_node, poly[poly.length - 1] || null, "end");
+    const inserts = comps.map(c => [nid(c), symXY(c, null)]).filter(x => x[1]);
+    segs[segId] = { poly, start, end, inserts };
+  }
+
+  const polyDist = (poly, xy) => poly.length === 1 ? hyp(poly[0], xy) : Math.min(...poly.slice(1).map((b, i) => distPointSeg(xy, poly[i], b)));
+  for (const [ref, t, xy, src] of junctions) {
+    let cands = ref in data._segEl ? [ref] : (data._sysSegs[ref] || []);
+    cands = cands.filter(c => c !== src && segs[c] && segs[c].poly.length);
+    if (!cands.length) continue;
+    const tgt = segs[cands.reduce((a, b) => polyDist(segs[b].poly, xy) < polyDist(segs[a].poly, xy) ? b : a)];
+    let merged = false;
+    for (const side of ["start", "end"]) {
+      const ent = tgt[side];
+      if (ent && ent[2] && hyp(ent[2], xy) <= tol) {
+        if ((nodes.get(ent[1]) || {}).label === "PipeEnd") { nodes.delete(ent[1]); tgt[side] = ["node", t, xy]; }
+        merged = true; break;
+      }
+    }
+    if (!merged) tgt.inserts.push([t, xy]);
+  }
+
+  const project = (poly, xy) => {
+    let best = null, acc = 0;
+    for (let i = 0; i + 1 < poly.length; i++) {
+      const a = poly[i], b = poly[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+      const t = L === 0 ? 0 : Math.max(0, Math.min(1, ((xy[0] - a[0]) * dx + (xy[1] - a[1]) * dy) / (L * L)));
+      const dd = Math.hypot(xy[0] - (a[0] + t * dx), xy[1] - (a[1] + t * dy));
+      if (!best || dd < best[0]) best = [dd, acc + t * L];
+      acc += L;
+    }
+    return best ? best[1] : 0;
+  };
+
+  for (const [segId, sg] of Object.entries(segs)) {
+    const info = segInfo[segId] || {}, conn = connOf[segId] || {}, poly = sg.poly;
+    const cum = [0]; for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + hyp(poly[i - 1], poly[i]));
+    const items = poly.map((xy, i) => [cum[i], 1, "pt", null, xy]);
+    for (const [id, xy] of sg.inserts) items.push([poly.length > 1 ? project(poly, xy) : 0, 0, "node", id, xy]);
+    items.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let seq = [...(sg.start ? [sg.start.slice()] : []), ...items.map(t => [t[2], t[3], t[4]]), ...(sg.end ? [sg.end.slice()] : [])];
+    const nxy = seq.filter(e => e[0] === "node" && e[2]).map(e => e[2]);
+    seq = seq.filter(e => e[0] === "node" || !nxy.some(q => hyp(e[2], q) <= tol));
+    const clean = [];
+    for (const e of seq) {
+      const last = clean[clean.length - 1];
+      if (last && e[0] === "node" && last[0] === "node" && e[1] === last[1]) continue;
+      if (last && e[0] === "pt" && last[0] === "pt" && hyp(e[2], last[2]) <= tol) continue;
+      clean.push(e);
+    }
+    for (let i = 1; i < clean.length - 1; i++) {
+      const e = clean[i]; if (e[0] !== "pt") continue;
+      let prv = null, nxt = null;
+      for (let j = i - 1; j >= 0; j--) if (clean[j][2]) { prv = clean[j][2]; break; }
+      for (let j = i + 1; j < clean.length; j++) if (clean[j][2]) { nxt = clean[j][2]; break; }
+      if (prv && nxt && isBend(prv, e[2], nxt)) { e[0] = "node"; e[1] = tee(e[2], "bend"); }
+    }
+    if (conn.flow_direction === "to->from") clean.reverse();
+    const base = { segment_id: info.id || segId, system_id: info.system_id ?? null, line_tag: info.tag_name ?? null,
+      virtual: !!info.virtual, flow: conn.flow_direction ?? null, drawing: dname, ...flatProps(info.attributes, "attr_") };
+    let cur = null, geom = [], k = 0;
+    for (const e of clean) {
+      if (e[2]) geom.push(e[2]);
+      if (e[0] !== "node") continue;
+      if (cur !== null && cur !== e[1]) {
+        let length = 0; for (let i = 1; i < geom.length; i++) length += hyp(geom[i - 1], geom[i]);
+        edges.push({ id: `${nid(segId)}#${k++}`, type: "PIPE", from: cur, to: e[1], ...base, length: +length.toFixed(3),
+          geometry: geom.flatMap(p => [+p[0].toFixed(3), +p[1].toFixed(3)]) });
+      }
+      cur = e[1]; geom = e[2] ? [e[2]] : [];
+    }
+  }
+  const nl = [...nodes.values()];
+  return { drawing: dname, summary: { nodes: nl.length, edges: edges.length, pipe_edges: edges.filter(e => e.type === "PIPE").length,
+    tees: nl.filter(n => n.label === "Tee").length, pipe_ends: nl.filter(n => n.label === "PipeEnd").length }, nodes: nl, edges };
+}
+
+/* ============================== 뷰어 ============================== */
+const $ = id => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d"), tip = $("tip");
+let G = null, nodeById = new Map(), bounds = null;
+let view = { s: 1, tx: 0, ty: 0 }, sel = null, hover = null, fileStem = "graph";
+const opt = () => ({ bend: $("o-bend").checked, label: $("o-label").checked, virtual: $("o-virtual").checked, arrow: $("o-arrow").checked, color: $("o-color").checked });
+
+let lineColors = new Map();
+function lineColor(key) {
+  if (!key) return "#7c8599";
+  if (!lineColors.has(key)) lineColors.set(key, `hsl(${(lineColors.size * 137.508 + 200) % 360} 72% 62%)`);
+  return lineColors.get(key);
+}
+function nodeStyle(n) {
+  if (n.label === "Tee") return n.tee_kinds.includes("branch") ? { c: "#ff9f43", shape: "dot", r: 4.5 } : { c: "#6b7280", shape: "dot", r: 2.5, bend: true };
+  if (n.label === "PipeEnd") return { c: "#ef4444", shape: "x", r: 5 };
+  if (n.kind === "Equipment") return { c: "#22c55e", shape: "box" };
+  if (n.kind === "Nozzle") return { c: "#a78bfa", shape: "sq", r: 3.5 };
+  if (/Instrument/i.test(n.kind)) return { c: "#38bdf8", shape: "circle", r: 6 };
+  return { c: "#eab308", shape: "diamond", r: 6 };
+}
+
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, r.width * dpr); cv.height = Math.max(1, r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+}
+const W2S = (x, y) => [x * view.s + view.tx, -y * view.s + view.ty];
+const S2W = (sx, sy) => [(sx - view.tx) / view.s, -(sy - view.ty) / view.s];
+
+function computeBounds() {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const add = (x, y) => { if (x == null || y == null) return; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
+  for (const n of G.nodes) { add(n.x, n.y); if (n.width) { add(n.x - n.width / 2, n.y - n.height / 2); add(n.x + n.width / 2, n.y + n.height / 2); } }
+  for (const e of G.edges) if (e.geometry) for (let i = 0; i < e.geometry.length; i += 2) add(e.geometry[i], e.geometry[i + 1]);
+  if (!isFinite(x0)) { x0 = 0; y0 = 0; x1 = 100; y1 = 100; }
+  return { x0, y0, x1, y1 };
+}
+function fit() {
+  if (!G) return;
+  const r = cv.getBoundingClientRect(), b = bounds, pad = 40;
+  const w = Math.max(b.x1 - b.x0, 1), h = Math.max(b.y1 - b.y0, 1);
+  view.s = Math.min((r.width - pad * 2) / w, (r.height - pad * 2) / h);
+  view.tx = (r.width - w * view.s) / 2 - b.x0 * view.s;
+  view.ty = (r.height + h * view.s) / 2 + b.y0 * view.s;
+  draw();
+}
+
+function neighborsOf(id) {
+  const set = new Set([id]);
+  for (const e of G.edges) { if (e.from === id) set.add(e.to); if (e.to === id) set.add(e.from); }
+  return set;
+}
+
+function draw() {
+  const r = cv.getBoundingClientRect();
+  ctx.clearRect(0, 0, r.width, r.height);
+  if (!G) return;
+  const o = opt();
+  const hiSeg = sel && sel.type === "edge" ? sel.item.segment_id : null;
+  const hiLine = sel && sel.type === "edge" ? (sel.item.attr_LineNumber || sel.item.system_id) : null;
+  const hiNodes = sel && sel.type === "node" ? neighborsOf(sel.item.id) : null;
+  const dim = !!sel;
+
+  // 엣지
+  for (const e of G.edges) {
+    if (e.type !== "PIPE" || !e.geometry || e.geometry.length < 4) continue;
+    if (e.virtual && !o.virtual) continue;
+    const lineKey = e.attr_LineNumber || e.system_id;
+    let on = !dim || (hiSeg && (e.segment_id === hiSeg || (hiLine && lineKey === hiLine))) || (hiNodes && hiNodes.has(e.from) && hiNodes.has(e.to) && (e.from === sel.item.id || e.to === sel.item.id));
+    const isSel = sel && sel.type === "edge" && sel.item === e;
+    ctx.strokeStyle = isSel ? "#ffffff" : (o.color ? lineColor(lineKey) : "#9aa3b5");
+    ctx.globalAlpha = on ? 1 : 0.15;
+    ctx.lineWidth = isSel ? 3.5 : (e === hover ? 3 : 2);
+    ctx.setLineDash(e.virtual ? [5, 4] : []);
+    ctx.beginPath();
+    for (let i = 0; i < e.geometry.length; i += 2) { const [sx, sy] = W2S(e.geometry[i], e.geometry[i + 1]); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }
+    ctx.stroke();
+    if (o.arrow && e.flow) drawArrow(e);
+  }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  // PART_OF
+  ctx.strokeStyle = "#a78bfa55"; ctx.lineWidth = 1;
+  for (const e of G.edges) if (e.type === "PART_OF") {
+    const a = nodeById.get(e.from), b = nodeById.get(e.to); if (!a || !b || a.x == null || b.x == null) continue;
+    const [ax, ay] = W2S(a.x, a.y), [bx, by] = W2S(b.x, b.y);
+    ctx.globalAlpha = !dim || (hiNodes && hiNodes.has(a.id) && hiNodes.has(b.id)) ? 1 : 0.15;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  }
+  // 노드
+  for (const n of G.nodes) {
+    if (n.x == null) continue;
+    const st = nodeStyle(n);
+    if (st.bend && !o.bend) continue;
+    const [x, y] = W2S(n.x, n.y);
+    const on = !dim || (hiNodes && hiNodes.has(n.id)) || (sel && sel.type === "edge" && (sel.item.from === n.id || sel.item.to === n.id));
+    ctx.globalAlpha = on ? 1 : 0.2;
+    const isSel = sel && sel.type === "node" && sel.item === n;
+    ctx.fillStyle = st.c; ctx.strokeStyle = isSel ? "#fff" : st.c; ctx.lineWidth = isSel ? 2.5 : 1.5;
+    const k = (n === hover || isSel) ? 1.4 : 1;
+    if (st.shape === "box") {
+      const w = Math.max((n.width || 10) * view.s, 10), h = Math.max((n.height || 10) * view.s, 10);
+      ctx.fillStyle = st.c + "33"; ctx.fillRect(x - w / 2, y - h / 2, w, h); ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+    } else if (st.shape === "diamond") {
+      const r = st.r * k; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill(); if (isSel) ctx.stroke();
+    } else if (st.shape === "sq") {
+      const r = st.r * k; ctx.fillRect(x - r, y - r, r * 2, r * 2); if (isSel) ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+    } else if (st.shape === "x") {
+      const r = st.r * k; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.lineWidth = 2; ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(x, y, st.r * k, 0, Math.PI * 2); ctx.fill(); if (isSel) ctx.stroke();
+    }
+    if (o.label && n.tag && n.kind !== "Nozzle") {
+      ctx.fillStyle = "#e6e8ee"; ctx.font = "11px -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif";
+      const off = st.shape === "box" ? Math.max((n.height || 10) * view.s, 10) / 2 + 12 : 14;
+      ctx.textAlign = "center"; ctx.fillText(n.tag, x, y - off + 4);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawArrow(e) {
+  const g = e.geometry; let total = 0; const segL = [];
+  for (let i = 2; i < g.length; i += 2) { const l = Math.hypot(g[i] - g[i - 2], g[i + 1] - g[i - 1]); segL.push(l); total += l; }
+  if (total * view.s < 24) return;
+  let half = total / 2, i = 0;
+  while (i < segL.length && half > segL[i]) { half -= segL[i]; i++; }
+  if (i >= segL.length) return;
+  const ax = g[i * 2], ay = g[i * 2 + 1], bx = g[i * 2 + 2], by = g[i * 2 + 3], t = segL[i] ? half / segL[i] : 0;
+  const [sx, sy] = W2S(ax + (bx - ax) * t, ay + (by - ay) * t);
+  const ang = Math.atan2(-(by - ay), bx - ax), s = 6;
+  ctx.fillStyle = ctx.strokeStyle; ctx.beginPath();
+  ctx.moveTo(sx + Math.cos(ang) * s, sy + Math.sin(ang) * s);
+  ctx.lineTo(sx + Math.cos(ang + 2.5) * s, sy + Math.sin(ang + 2.5) * s);
+  ctx.lineTo(sx + Math.cos(ang - 2.5) * s, sy + Math.sin(ang - 2.5) * s);
+  ctx.closePath(); ctx.fill();
+}
+
+function hitTest(sx, sy) {
+  if (!G) return null;
+  const o = opt(); let best = null, bd = 9;
+  for (const n of G.nodes) {
+    if (n.x == null) continue; const st = nodeStyle(n); if (st.bend && !o.bend) continue;
+    const [x, y] = W2S(n.x, n.y);
+    if (st.shape === "box") {
+      const w = Math.max((n.width || 10) * view.s, 10) / 2, h = Math.max((n.height || 10) * view.s, 10) / 2;
+      if (Math.abs(sx - x) <= w && Math.abs(sy - y) <= h) { const d = 6; if (d < bd) { bd = d; best = { type: "node", item: n }; } }
+    } else { const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = { type: "node", item: n }; } }
+  }
+  if (best && best.item.kind !== "Equipment") return best;
+  let eb = null, ed = 6;
+  for (const e of G.edges) {
+    if (e.type !== "PIPE" || !e.geometry || (e.virtual && !o.virtual)) continue;
+    for (let i = 2; i < e.geometry.length; i += 2) {
+      const a = W2S(e.geometry[i - 2], e.geometry[i - 1]), b = W2S(e.geometry[i], e.geometry[i + 1]);
+      const d = distPointSeg([sx, sy], a, b); if (d < ed) { ed = d; eb = { type: "edge", item: e }; }
+    }
+  }
+  return eb || best;
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function showDetail() {
+  const d = $("detail");
+  if (!sel) { d.innerHTML = '<div class="sub">노드나 파이프를 클릭하면 정보가 나와요.<br>드래그: 이동 · 휠: 확대/축소</div>'; return; }
+  const it = sel.item;
+  const rows = Object.entries(it).filter(([k, v]) => v != null && v !== "" && k !== "geometry")
+    .map(([k, v]) => {
+      let val = esc(typeof v === "object" ? JSON.stringify(v) : v);
+      if ((k === "from" || k === "to") && nodeById.has(v)) { const n = nodeById.get(v); val = `<span class="link" data-node="${esc(v)}">${esc(n.tag || n.label)} · ${esc(v)}</span>`; }
+      return `<tr><td>${esc(k)}</td><td>${val}</td></tr>`;
+    }).join("");
+  let extra = "";
+  if (sel.type === "node") {
+    const conns = G.edges.filter(e => e.type === "PIPE" && (e.from === it.id || e.to === it.id));
+    extra = `<h3 style="margin-top:12px">연결된 파이프 (${conns.length})</h3>` + conns.map(e => {
+      const other = nodeById.get(e.from === it.id ? e.to : e.from) || {};
+      return `<div><span class="link" data-node="${esc(other.id)}">${e.from === it.id ? "→" : "←"} ${esc(other.tag || other.label || other.id)}</span> <span style="color:var(--muted)">${esc(e.attr_LineNumber || e.line_tag || e.segment_id)}${e.virtual ? " (가상)" : ""}</span></div>`;
+    }).join("");
+  }
+  const title = sel.type === "node" ? (it.tag || it.label) : (it.attr_LineNumber || it.line_tag || it.segment_id);
+  const sub = sel.type === "node" ? `${it.label} · ${it.kind}` : `PIPE · ${it.segment_id}${it.virtual ? " · 가상" : ""}`;
+  d.innerHTML = `<div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div><table>${rows}</table>${extra}`;
+  d.querySelectorAll("[data-node]").forEach(a => a.onclick = () => selectNode(a.dataset.node, true));
+}
+function selectNode(id, center) {
+  const n = nodeById.get(id); if (!n) return;
+  sel = { type: "node", item: n };
+  if (center && n.x != null) { const r = cv.getBoundingClientRect(); view.tx = r.width / 2 - n.x * view.s; view.ty = r.height / 2 + n.y * view.s; }
+  showDetail(); draw();
+}
+
+// 입력
+let drag = null, moved = false;
+cv.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty }; moved = false; cv.setPointerCapture(e.pointerId); cv.classList.add("dragging"); });
+cv.addEventListener("pointermove", e => {
+  const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+    view.tx = drag.tx + dx; view.ty = drag.ty + dy; draw(); return;
+  }
+  const h = hitTest(sx, sy), item = h ? h.item : null;
+  if (item !== hover) { hover = item; draw(); }
+  if (h) {
+    tip.style.display = "block"; tip.style.left = sx + 14 + "px"; tip.style.top = sy + 10 + "px";
+    tip.textContent = h.type === "node" ? `${h.item.tag || h.item.label} (${h.item.label})` : `${h.item.attr_LineNumber || h.item.line_tag || h.item.segment_id}${h.item.attr_NominalDiameter ? " · " + h.item.attr_NominalDiameter : ""}`;
+  } else tip.style.display = "none";
+});
+cv.addEventListener("pointerup", e => {
+  cv.classList.remove("dragging");
+  if (drag && !moved) { const r = cv.getBoundingClientRect(); sel = hitTest(e.clientX - r.left, e.clientY - r.top); showDetail(); draw(); }
+  drag = null;
+});
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const [wx, wy] = S2W(sx, sy), f = Math.exp(-e.deltaY * 0.0015);
+  view.s *= f; view.tx = sx - wx * view.s; view.ty = sy + wy * view.s; draw();
+}, { passive: false });
+window.addEventListener("resize", resize);
+["o-bend", "o-label", "o-virtual", "o-arrow", "o-color"].forEach(id => $(id).onchange = draw);
+$("fit").onclick = fit;
+$("open").onclick = $("pick").onclick = () => $("file").click();
+$("file").onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
+$("q").addEventListener("keydown", e => {
+  if (e.key !== "Enter" || !G) return;
+  const q = e.target.value.trim().toLowerCase(); if (!q) return;
+  const n = G.nodes.find(n => [n.tag, n.id, n.source_id].some(v => v && String(v).toLowerCase() === q))
+        || G.nodes.find(n => [n.tag, n.id].some(v => v && String(v).toLowerCase().includes(q)));
+  if (n) return selectNode(n.id, true);
+  const ed = G.edges.find(ed => ed.type === "PIPE" && [ed.attr_LineNumber, ed.line_tag, ed.segment_id].some(v => v && String(v).toLowerCase().includes(q)));
+  if (ed) { sel = { type: "edge", item: ed }; showDetail(); draw(); }
+});
+const drop = $("drop"), stage = $("stage");
+stage.addEventListener("dragover", e => { e.preventDefault(); drop.classList.remove("hidden"); drop.classList.add("over"); });
+stage.addEventListener("dragleave", () => { drop.classList.remove("over"); if (G) drop.classList.add("hidden"); });
+stage.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+
+function loadFile(file) {
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const doc = new DOMParser().parseFromString(fr.result, "application/xml");
+      const pe = doc.getElementsByTagName("parsererror")[0];
+      if (pe) throw new Error("XML 파싱 실패: " + pe.textContent.slice(0, 200));
+      const data = parseProteus(doc, file.name);
+      G = buildGraph(data);
+      fileStem = file.name.replace(/\.[^.]+$/, "");
+      nodeById = new Map(G.nodes.map(n => [n.id, n]));
+      bounds = computeBounds(); sel = null; hover = null; lineColors = new Map();
+      const pe2 = G.edges.filter(e => e.type === "PIPE");
+      $("s-nodes").textContent = G.summary.nodes;
+      $("s-edges").textContent = G.summary.pipe_edges;
+      $("s-tees").textContent = G.summary.tees;
+      $("s-lines").textContent = new Set(pe2.map(e => e.attr_LineNumber || e.system_id)).size;
+      $("s-virtual").textContent = pe2.filter(e => e.virtual).length;
+      $("s-ends").textContent = G.summary.pipe_ends;
+      const pi = data.plant_information || {};
+      $("file-name").textContent = `${file.name} · ${G.drawing}${pi.OriginatingSystem ? " · " + pi.OriginatingSystem : ""}${pi.SchemaVersion ? " " + pi.SchemaVersion : ""}`;
+      drop.classList.add("hidden"); $("err").textContent = "";
+      showDetail(); resize(); fit();
+    } catch (err) {
+      console.error(err); G = null; drop.classList.remove("hidden"); $("err").textContent = err.message; draw();
+    }
+  };
+  fr.readAsText(file);
+}
+
+function download(name, text, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function toCSV(rows) {
+  const keys = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  const cell = v => { if (v == null) return ""; if (Array.isArray(v)) v = v.join(";"); v = String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  return "﻿" + [keys.join(","), ...rows.map(r => keys.map(k => cell(r[k])).join(","))].join("\n");
+}
+$("dl-graph").onclick = () => G && download(`${fileStem}.graph.json`, JSON.stringify(G, null, 2), "application/json");
+$("dl-nodes").onclick = () => G && download(`${fileStem}_nodes.csv`, toCSV(G.nodes.map(({ id, label, ...r }) => ({ "id:ID": id, ":LABEL": label, ...r }))), "text/csv");
+$("dl-edges").onclick = () => G && download(`${fileStem}_edges.csv`, toCSV(G.edges.map(({ from, to, type, ...r }) => ({ ":START_ID": from, ":END_ID": to, ":TYPE": type, ...r }))), "text/csv");
+
+resize();
+</script>
+</body>
+</html>

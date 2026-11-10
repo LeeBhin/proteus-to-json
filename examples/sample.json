@@ -31,14 +31,14 @@
     "attributes": {}
   },
   "summary": {
-    "symbols": 5,
+    "symbols": 8,
     "symbols_by_type": {
-      "Equipment": 2,
-      "Nozzle": 2,
-      "PipingComponent": 1
+      "Equipment": 3,
+      "Nozzle": 3,
+      "PipingComponent": 2
     },
-    "pipes": 2,
-    "connections": 2,
+    "pipes": 3,
+    "connections": 3,
     "virtual_connections": 1,
     "texts": 1
   },
@@ -381,6 +381,170 @@
         ]
       },
       "virtual": false
+    },
+    {
+      "id": "EQ-3",
+      "type": "Equipment",
+      "component_class": "Vessel",
+      "component_name": "VESSEL_H",
+      "tag_name": "V-301",
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 230,
+          "y": 95,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 210,
+          "y": 80,
+          "z": 0
+        },
+        "max": {
+          "x": 250,
+          "y": 110,
+          "z": 0
+        },
+        "width": 40,
+        "height": 30,
+        "center": {
+          "x": 230.0,
+          "y": 95.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": null,
+      "virtual": false
+    },
+    {
+      "id": "NZ-3",
+      "type": "Nozzle",
+      "component_class": "Nozzle",
+      "component_name": null,
+      "tag_name": "N1",
+      "parent_id": "EQ-3",
+      "position": {
+        "location": {
+          "x": 230,
+          "y": 110,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "rotation_deg": 90.0,
+        "mirrored": false
+      },
+      "extent": null,
+      "scale": null,
+      "presentation": null,
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": {
+        "num_points": 2,
+        "flow_in": 1,
+        "flow_out": 0,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 230,
+              "y": 110,
+              "z": 0
+            },
+            "flow": "out"
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 230,
+              "y": 112,
+              "z": 0
+            },
+            "flow": "in"
+          }
+        ]
+      },
+      "virtual": false
+    },
+    {
+      "id": "V-3",
+      "type": "PipingComponent",
+      "component_class": "GlobeValve",
+      "component_name": "VALVE_GLOBE",
+      "tag_name": "HV-102",
+      "parent_id": "SEG-3",
+      "position": {
+        "location": {
+          "x": 230,
+          "y": 130,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "rotation_deg": 270.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 225,
+          "y": 125,
+          "z": 0
+        },
+        "max": {
+          "x": 235,
+          "y": 135,
+          "z": 0
+        },
+        "width": 10,
+        "height": 10,
+        "center": {
+          "x": 230.0,
+          "y": 130.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": null,
+      "virtual": false
     }
   ],
   "pipes": [
@@ -429,6 +593,26 @@
               "z": 0
             },
             {
+              "x": 250,
+              "y": 200,
+              "z": 0
+            },
+            {
+              "x": 250,
+              "y": 230,
+              "z": 0
+            },
+            {
+              "x": 280,
+              "y": 230,
+              "z": 0
+            },
+            {
+              "x": 280,
+              "y": 200,
+              "z": 0
+            },
+            {
               "x": 298,
               "y": 200,
               "z": 0
@@ -466,6 +650,67 @@
       "components": [],
       "extent": null,
       "virtual": true
+    },
+    {
+      "id": "SEG-3",
+      "system_id": "PNS-2",
+      "component_class": null,
+      "tag_name": "2\"-P-1002-A1",
+      "persistent_id": {
+        "identifier": "6450-PipeSeg",
+        "context": "P0001000"
+      },
+      "attributes": {
+        "LineNumber": "P-1002",
+        "NominalDiameter": "2\""
+      },
+      "segment_attributes": {},
+      "system_attributes": {
+        "LineNumber": "P-1002",
+        "NominalDiameter": "2\""
+      },
+      "centerlines": [
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 150,
+              "y": 200,
+              "z": 0
+            },
+            {
+              "x": 150,
+              "y": 150,
+              "z": 0
+            },
+            {
+              "x": 230,
+              "y": 150,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 230,
+              "y": 150,
+              "z": 0
+            },
+            {
+              "x": 230,
+              "y": 112,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "components": [
+        "V-3"
+      ],
+      "extent": null,
+      "virtual": false
     }
   ],
   "connections": [
@@ -501,6 +746,23 @@
       "to_node_flow": "in",
       "flow_direction": "from->to",
       "virtual": true,
+      "unresolved": []
+    },
+    {
+      "segment_id": "SEG-3",
+      "from_id": "SEG-1",
+      "from_node": null,
+      "to_id": "NZ-3",
+      "to_node": 1,
+      "segment_line": "P-1002",
+      "from_type": null,
+      "from_tag": "4\"-P-1001-A1",
+      "to_type": "Nozzle",
+      "to_tag": "N1",
+      "from_node_flow": null,
+      "to_node_flow": "in",
+      "flow_direction": "from->to",
+      "virtual": false,
       "unresolved": []
     }
   ],
