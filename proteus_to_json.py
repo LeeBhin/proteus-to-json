@@ -18,6 +18,7 @@ import argparse
 import csv
 import json
 import math
+import re
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -448,6 +449,13 @@ def build_graph(p, data, tol=None, include_geometry=False):
             nodes[node_id] = {"id": node_id, "label": label, **props}
         return node_id
 
+    # 0) 실제 Tee 부품 (ComponentClass에 tee 포함, 또는 PdmsType = TEE)
+    def is_tee_sym(s):
+        if re.search(r"tee", s.get("component_class") or "", re.I):
+            return True
+        return any(re.fullmatch(r"pdms[ _-]?type", k, re.I) and str(v).strip().upper() == "TEE"
+                   for k, v in (s.get("attributes") or {}).items())
+
     # 1) 심볼 노드
     for s in data["symbols"]:
         pos = s["position"] or {}
@@ -468,8 +476,10 @@ def build_graph(p, data, tol=None, include_geometry=False):
             "persistent_id": (s["persistent_id"] or {}).get("identifier"),
             "drawing": dname,
         }
+        if is_tee_sym(s):     # 실제 Tee 부품도 온톨로지의 Tee 노드
+            props.update({"tee_kinds": "branch", "tee_source": "component"})
         props.update(_flat_props(s["attributes"], "attr_"))
-        add_node(nid(s["id"]), s["component_class"] or s["type"], props)
+        add_node(nid(s["id"]), "Tee" if is_tee_sym(s) else (s["component_class"] or s["type"]), props)
     for s in data["symbols"]:
         if s["parent_id"] in sym:   # 노즐 -> 기기 등
             edges.append({"id": f"{nid(s['id'])}>PART_OF", "type": "PART_OF",
@@ -487,7 +497,8 @@ def build_graph(p, data, tol=None, include_geometry=False):
             return tee_at[key]
         tid = nid(f"TEE_{xy[0]:g}_{xy[1]:g}")
         tee_at[key] = tid
-        add_node(tid, "Tee", {"kind": "Tee", "tee_kinds": kind, "x": xy[0], "y": xy[1], "drawing": dname})
+        add_node(tid, "Tee", {"kind": "Tee", "tee_kinds": kind, "tee_source": "geometry" if kind == "bend" else "connection",
+                              "x": xy[0], "y": xy[1], "drawing": dname})
         return tid
 
     def sym_xy(ref, node_idx):
@@ -501,7 +512,6 @@ def build_graph(p, data, tol=None, include_geometry=False):
                     return _xy(n["location"])
         return _xy((s["position"] or {}).get("location")) or _xy((s["extent"] or {}).get("center"))
 
-    # 3) 세그먼트별 중심선 체인(기하 기준으로 이어 붙임) + 양끝 노드
     def chain(lines, start_hint):
         lines = [l for l in lines if l]
         if not lines:
@@ -523,54 +533,204 @@ def build_graph(p, data, tol=None, include_geometry=False):
             out.extend(nxt)
         return out
 
-    segs, junctions = {}, []
-    for seg_id, el in p.seg_el.items():
-        lines = []
-        for cl in el.iter():
-            if local(cl.tag) == "CenterLine" and p.ancestor(cl, "PipingNetworkSegment") is el:
-                lines.append([xy for xy in (_xy(xyz(c)) for c in children(cl, "Coordinate")) if xy])
-        comps = [attr(c, "ID") for c in el.iter()
-                 if attr(c, "ID") in sym and p.ancestor(c, "PipingNetworkSegment") is el
-                 and sym[attr(c, "ID")]["parent_id"] == seg_id]
-        conn = conn_of.get(seg_id) or {}
-        s_hint = sym_xy(conn.get("from_id"), conn.get("from_node"))
-        e_hint = sym_xy(conn.get("to_id"), conn.get("to_node"))
-        poly = chain(lines, s_hint)
-        if poly and not s_hint and e_hint:   # 끝쪽 힌트만 있으면 방향 맞추기
-            if math.hypot(poly[0][0] - e_hint[0], poly[0][1] - e_hint[1]) < math.hypot(poly[-1][0] - e_hint[0], poly[-1][1] - e_hint[1]):
-                poly = poly[::-1]
-
-        def resolve(ref, node_idx, near, side):
-            if ref in sym:
-                return ("node", nid(ref), sym_xy(ref, node_idx) or near)
-            if near is None:
-                return None
-            if ref in p.seg_el or ref in p.sys_segs:        # 파이프끼리 연결 / 분기
-                t_id = tee(near, "branch")
-                junctions.append((ref, t_id, near, seg_id))
-                return ("node", t_id, near)
-            e_id = nid(f"END_{seg_id}_{side}")
-            add_node(e_id, "PipeEnd", {"kind": "PipeEnd", "x": near[0], "y": near[1],
-                                       "unresolved_ref": ref, "drawing": dname})
-            return ("node", e_id, near)
-
-        start = resolve(conn.get("from_id"), conn.get("from_node"), poly[0] if poly else None, "start")
-        end = resolve(conn.get("to_id"), conn.get("to_node"), poly[-1] if poly else None, "end")
-        inserts = [(nid(c), sym_xy(c, None)) for c in comps if sym_xy(c, None)]
-        segs[seg_id] = {"poly": poly, "start": start, "end": end, "inserts": inserts}
-
-    # 4) 분기 Tee를 대상 세그먼트에 등록 (대상이 System이면 가장 가까운 세그먼트)
     def poly_dist(poly, xy):
         if len(poly) == 1:
             return math.hypot(poly[0][0] - xy[0], poly[0][1] - xy[1])
         return min((_dist_point_seg(xy, a, b) for a, b in zip(poly, poly[1:])), default=float("inf"))
 
+    def closest_on_poly(poly, xy):
+        best = None
+        for a, b in zip(poly, poly[1:]):
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            L2 = dx * dx + dy * dy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((xy[0] - a[0]) * dx + (xy[1] - a[1]) * dy) / L2))
+            q = (a[0] + t * dx, a[1] + t * dy)
+            dd = math.hypot(xy[0] - q[0], xy[1] - q[1])
+            if best is None or dd < best[0]:
+                best = (dd, q)
+        return best[1] if best else poly[0]
+
+    # 3-1) 세그먼트별 CenterLine 모으기: 세그먼트 안에 있는 것 + parent id로 세그먼트를 가리키는 바깥 것
+    pid2seg = {(i.get("persistent_id") or {}).get("identifier"): sid for sid, i in seg_info.items()
+               if (i.get("persistent_id") or {}).get("identifier")}
+    pid2sym = {(s["persistent_id"] or {}).get("identifier"): s["id"] for s in data["symbols"]
+               if (s["persistent_id"] or {}).get("identifier")}
+
+    def parent_ref(cl):
+        for name in ("ParentID", "Parent", "ParentRef", "OwnerID", "Owner"):
+            v = attr(cl, name)
+            if v:
+                return v
+        for k, v in parse_generic_attributes(cl).items():
+            if re.fullmatch(r"(parent|owner)[ _-]?(id|ref)?", k, re.I) and v not in (None, ""):
+                return str(v["value"] if isinstance(v, dict) else v)
+        return None
+
+    seg_lines = {sid: [] for sid in p.seg_el}
+    sys_lines, unassigned_lines, outside_lines = {}, 0, 0
+    for cl in p.root.iter():
+        if local(cl.tag) != "CenterLine":
+            continue
+        pts = [xy for xy in (_xy(xyz(c)) for c in children(cl, "Coordinate")) if xy]
+        if not pts:
+            continue
+        owner = p.ancestor(cl, "PipingNetworkSegment")
+        if owner is not None and attr(owner, "ID") in seg_lines:
+            seg_lines[attr(owner, "ID")].append(pts)
+            continue
+        outside_lines += 1
+        ref = parent_ref(cl)
+        if ref in seg_lines:
+            seg_lines[ref].append(pts)
+        elif ref in pid2seg:
+            seg_lines[pid2seg[ref]].append(pts)
+        else:
+            sys_el = p.ancestor(cl, "PipingNetworkSystem")
+            sref = ref if ref in p.sys_segs else (attr(sys_el, "ID") if sys_el is not None else None)
+            if sref in p.sys_segs:
+                sys_lines.setdefault(sref, []).append(pts)
+            else:
+                unassigned_lines += 1
+
+    def seg_comps(seg_id, el):
+        return [attr(c, "ID") for c in el.iter()
+                if attr(c, "ID") in sym and p.ancestor(c, "PipingNetworkSegment") is el
+                and sym[attr(c, "ID")]["parent_id"] == seg_id]
+
+    # System만 가리키는 CenterLine은 부품/연결 위치가 가장 가까운 세그먼트에 배정
+    for sref, lines in sys_lines.items():
+        cands = p.sys_segs.get(sref, [])
+        for pts in lines:
+            def score(sid):
+                conn = conn_of.get(sid) or {}
+                anchors = [sym_xy(c, None) for c in seg_comps(sid, p.seg_el[sid])]
+                anchors += [sym_xy(conn.get("from_id"), conn.get("from_node")), sym_xy(conn.get("to_id"), conn.get("to_node"))]
+                anchors += [q for l in seg_lines[sid] for q in l]
+                anchors = [a for a in anchors if a]
+                return min((math.hypot(a[0] - q[0], a[1] - q[1]) for a in anchors for q in (pts[0], pts[-1])), default=float("inf"))
+            if cands:
+                seg_lines[min(cands, key=score)].append(pts)
+
+    # 3-2) 세그먼트 경로
+    def attr_hint(info, side):
+        for k, v in (info.get("attributes") or {}).items():
+            if re.fullmatch(rf"connected[ _-]?pdms[ _-]?type[ _-]?{side}", k, re.I) and v:
+                return str(v["value"] if isinstance(v, dict) else v).strip().upper()
+        return None
+
+    segs = {}
+    for seg_id, el in p.seg_el.items():
+        comps = seg_comps(seg_id, el)
+        conn = conn_of.get(seg_id) or {}
+        s_hint = sym_xy(pid2sym.get(conn.get("from_id"), conn.get("from_id")), conn.get("from_node"))
+        e_hint = sym_xy(pid2sym.get(conn.get("to_id"), conn.get("to_id")), conn.get("to_node"))
+        poly = chain(seg_lines.get(seg_id, []), s_hint)
+        if poly and not s_hint and e_hint:   # 끝쪽 힌트만 있으면 방향 맞추기
+            if math.hypot(poly[0][0] - e_hint[0], poly[0][1] - e_hint[1]) < math.hypot(poly[-1][0] - e_hint[0], poly[-1][1] - e_hint[1]):
+                poly = poly[::-1]
+        segs[seg_id] = {"poly": poly, "comps": comps, "conn": conn, "inferred": [],
+                        "hint_from": attr_hint(seg_info.get(seg_id, {}), "from"),
+                        "hint_to": attr_hint(seg_info.get(seg_id, {}), "to")}
+
+    # 3-3) 양끝 연결: Connection -> (없으면) 좌표로 근처 심볼/파이프에 붙임
+    snap = tol * 30
+    junctions = []
+
+    def sym_dist(s, xy):
+        ds = []
+        cp = s.get("connection_points")
+        if cp:
+            ds += [math.hypot(xy[0] - q[0], xy[1] - q[1]) for q in (_xy(n["location"]) for n in cp["nodes"]) if q]
+        loc = _xy((s["position"] or {}).get("location"))
+        if loc:
+            ds.append(math.hypot(xy[0] - loc[0], xy[1] - loc[1]))
+        ext = s["extent"] or {}
+        mn, mx = _xy(ext.get("min")), _xy(ext.get("max"))
+        if mn and mx:
+            dx = max(mn[0] - xy[0], 0, xy[0] - mx[0])
+            dy = max(mn[1] - xy[1], 0, xy[1] - mx[1])
+            ds.append(math.hypot(dx, dy))
+        return min(ds) if ds else float("inf")
+
+    def hint_ok(s, hint):
+        if not hint:
+            return True
+        if hint == "TEE":
+            return is_tee_sym(s)
+        if hint.startswith("NOZZ"):
+            return s["type"] == "Nozzle"
+        if hint.startswith("VALV"):
+            return bool(re.search(r"valve", s.get("component_class") or "", re.I))
+        return True
+
+    def snap_sym(xy, hint, exclude):
+        best = None
+        for s in data["symbols"]:
+            if s["id"] in exclude:
+                continue
+            d = sym_dist(s, xy)
+            if d > snap:
+                continue
+            ext = s["extent"] or {}
+            area = (ext.get("width") or 0) * (ext.get("height") or 0)
+            key = (0 if hint_ok(s, hint) else 1, d, area)
+            if best is None or key < best[0]:
+                best = (key, s["id"])
+        return best[1] if best else None
+
+    def resolve(seg_id, ref, node_idx, near, side, hint):
+        sg = segs[seg_id]
+        if ref and ref not in sym and ref in pid2sym:
+            ref = pid2sym[ref]
+        if ref in sym:
+            return ("node", nid(ref), sym_xy(ref, node_idx) or near)
+        if near is None:
+            return None
+        if ref in p.seg_el or ref in p.sys_segs or ref in pid2seg:   # 파이프끼리 연결 / 분기
+            hit = snap_sym(near, "TEE", set(sg["comps"]))
+            if hit and is_tee_sym(sym[hit]):
+                return ("node", nid(hit), sym_xy(hit, None) or near)
+            t_id = tee(near, "branch")
+            junctions.append((pid2seg.get(ref, ref), t_id, near, seg_id))
+            return ("node", t_id, near)
+        # Connection 없음 -> 좌표로 추정
+        hit = snap_sym(near, hint, set(sg["comps"]))
+        if hit:
+            sg["inferred"].append(side)
+            return ("node", nid(hit), sym_xy(hit, None) or near)
+        best = None
+        for sid, other in segs.items():
+            if sid == seg_id or len(other["poly"]) < 2:
+                continue
+            d = poly_dist(other["poly"], near)
+            if d <= snap and (best is None or d < best[0]):
+                best = (d, sid)
+        if best:
+            q = closest_on_poly(segs[best[1]]["poly"], near)
+            t_id = tee(q, "branch")
+            junctions.append((best[1], t_id, q, seg_id))
+            sg["inferred"].append(side)
+            return ("node", t_id, q)
+        e_id = nid(f"END_{seg_id}_{side}")
+        add_node(e_id, "PipeEnd", {"kind": "PipeEnd", "x": near[0], "y": near[1], "unresolved_ref": ref,
+                                   "hint": hint, "drawing": dname})
+        return ("node", e_id, near)
+
+    for seg_id, sg in segs.items():
+        conn, poly = sg["conn"], sg["poly"]
+        sg["start"] = resolve(seg_id, conn.get("from_id"), conn.get("from_node"), poly[0] if poly else None, "start", sg["hint_from"])
+        sg["end"] = resolve(seg_id, conn.get("to_id"), conn.get("to_node"), poly[-1] if poly else None, "end", sg["hint_to"])
+        sg["inserts"] = [(nid(c), sym_xy(c, None)) for c in sg["comps"] if sym_xy(c, None)]
+
+    # 4) 분기 Tee를 대상 세그먼트에 등록 (대상이 System이면 가장 가까운 세그먼트)
     for ref, t_id, xy, src in junctions:
         cands = [ref] if ref in p.seg_el else p.sys_segs.get(ref, [])
         cands = [c for c in cands if c != src and segs.get(c, {}).get("poly")]
         if not cands:
             continue
         tgt = segs[min(cands, key=lambda c: poly_dist(segs[c]["poly"], xy))]
+        if t_id in [e[1] for e in (tgt["start"], tgt["end"]) if e] or t_id in [i[0] for i in tgt["inserts"]]:
+            continue
         for side in ("start", "end"):    # 대상의 끝점과 같은 위치면 PipeEnd를 Tee로 교체
             ent = tgt[side]
             if ent and ent[2] and math.hypot(ent[2][0] - xy[0], ent[2][1] - xy[1]) <= tol:
@@ -634,6 +794,7 @@ def build_graph(p, data, tol=None, include_geometry=False):
             "segment_id": info.get("id", seg_id), "system_id": info.get("system_id"),
             "line_tag": info.get("tag_name"), "virtual": bool(info.get("virtual")),
             "flow": conn.get("flow_direction"), "drawing": dname,
+            "connection_inferred": ";".join(sg["inferred"]) or None,
         }
         base.update(_flat_props(info.get("attributes"), "attr_"))
         cur, geom, k = None, [], 0
@@ -662,6 +823,10 @@ def build_graph(p, data, tol=None, include_geometry=False):
             "bend_tees": sum(1 for n in nodes.values() if n["label"] == "Tee" and "bend" in n["tee_kinds"]),
             "branch_tees": sum(1 for n in nodes.values() if n["label"] == "Tee" and "branch" in n["tee_kinds"]),
             "centerline_points": sum(len(sg["poly"]) for sg in segs.values()),
+            "centerlines_outside_segment": outside_lines,
+            "centerlines_unassigned": unassigned_lines,
+            "component_tees": sum(1 for n in nodes.values() if n.get("tee_source") == "component"),
+            "inferred_connection_ends": sum(len(sg["inferred"]) for sg in segs.values()),
             "segments_without_centerline": sum(1 for sg in segs.values() if not sg["poly"]),
             "tol": tol,
             "pipe_ends": sum(1 for n in nodes.values() if n["label"] == "PipeEnd"),
@@ -757,7 +922,9 @@ def main():
             gs = g["summary"]
             print(f"[GRAPH] {gout} | nodes {gs['nodes']} (tee: bend {gs['bend_tees']}, branch {gs['branch_tees']}), "
                   f"edges {gs['edges']} (pipe {gs['pipe_edges']}), centerline pts {gs['centerline_points']}, "
-                  f"segments w/o centerline {gs['segments_without_centerline']}, tol {gs['tol']:.4g}", file=sys.stderr)
+                  f"segments w/o centerline {gs['segments_without_centerline']}, outside centerlines {gs['centerlines_outside_segment']} "
+                  f"(unassigned {gs['centerlines_unassigned']}), component tees {gs['component_tees']}, "
+                  f"inferred ends {gs['inferred_connection_ends']}, tol {gs['tol']:.4g}", file=sys.stderr)
         s = data["summary"]
         print(f"[OK] {path} -> {out} | symbols {s['symbols']}, pipes {s['pipes']}, "
               f"connections {s['connections']} (virtual {s['virtual_connections']})", file=sys.stderr)

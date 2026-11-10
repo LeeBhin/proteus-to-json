@@ -8,6 +8,10 @@
     "bend_tees": 6,
     "branch_tees": 1,
     "centerline_points": 13,
+    "centerlines_outside_segment": 0,
+    "centerlines_unassigned": 0,
+    "component_tees": 0,
+    "inferred_connection_ends": 0,
     "segments_without_centerline": 1,
     "tol": 0.1029619832753818,
     "pipe_ends": 0
@@ -189,6 +193,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "branch",
+      "tee_source": "connection",
       "x": 150.0,
       "y": 200.0,
       "drawing": "P-001"
@@ -198,6 +203,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "bend",
+      "tee_source": "geometry",
       "x": 250.0,
       "y": 200.0,
       "drawing": "P-001"
@@ -207,6 +213,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "bend",
+      "tee_source": "geometry",
       "x": 250.0,
       "y": 230.0,
       "drawing": "P-001"
@@ -216,6 +223,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "bend",
+      "tee_source": "geometry",
       "x": 280.0,
       "y": 230.0,
       "drawing": "P-001"
@@ -225,6 +233,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "bend",
+      "tee_source": "geometry",
       "x": 280.0,
       "y": 200.0,
       "drawing": "P-001"
@@ -234,6 +243,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "bend",
+      "tee_source": "geometry",
       "x": 150.0,
       "y": 150.0,
       "drawing": "P-001"
@@ -243,6 +253,7 @@
       "label": "Tee",
       "kind": "Tee",
       "tee_kinds": "bend",
+      "tee_source": "geometry",
       "x": 230.0,
       "y": 150.0,
       "drawing": "P-001"
@@ -278,6 +289,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -294,6 +306,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -310,6 +323,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -326,6 +340,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -342,6 +357,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -358,6 +374,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -374,6 +391,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -390,6 +408,7 @@
       "virtual": true,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1001",
       "attr_NominalDiameter": "4\"",
       "attr_PipingSpec": "A1",
@@ -406,6 +425,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
       "length": 50.0
@@ -421,6 +441,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
       "length": 80.0
@@ -436,6 +457,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
       "length": 20.0
@@ -451,6 +473,7 @@
       "virtual": false,
       "flow": "from->to",
       "drawing": "P-001",
+      "connection_inferred": null,
       "attr_LineNumber": "P-1002",
       "attr_NominalDiameter": "2\"",
       "length": 18.0

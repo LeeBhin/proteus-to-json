@@ -254,7 +254,7 @@ function parseProteus(doc, fileName) {
     source_file: fileName,
     plant_information: info ? Object.fromEntries(Array.from(info.attributes).map(a => [a.localName || a.name, a.value])) : null,
     drawing: drawing ? { name: attr(drawing, "Name"), extent: parseExtent(drawing) } : null,
-    symbols, pipes, connections, _segEl: segEl, _sysSegs: sysSegs, _diag: coordDiag(all),
+    symbols, pipes, connections, _segEl: segEl, _sysSegs: sysSegs, _diag: coordDiag(all), _all: all,
   };
 }
 
@@ -297,29 +297,35 @@ function buildGraph(data, tol = null) {
   const connOf = {}; for (const c of data.connections) if (!(c.segment_id in connOf)) connOf[c.segment_id] = c;
   const addNode = (id, label, props) => { if (!nodes.has(id)) nodes.set(id, { id, label, ...props }); return id; };
 
+  const has = (o, k) => k != null && Object.prototype.hasOwnProperty.call(o, k);
+  // 실제 Tee 부품 (ComponentClass에 tee 포함, 또는 PdmsType = TEE)
+  const isTeeSym = s => /tee/i.test(s.component_class || "") ||
+    Object.entries(s.attributes || {}).some(([k, v]) => /^pdms[ _-]?type$/i.test(k) && String(v).trim().toUpperCase() === "TEE");
   for (const s of data.symbols) {
     const pos = s.position || {}, ext = s.extent || {};
     const loc = XY(pos.location) || XY(ext.center);
-    addNode(nid(s.id), s.component_class || s.type, {
+    const tee = isTeeSym(s);
+    addNode(nid(s.id), tee ? "Tee" : (s.component_class || s.type), {
       kind: s.type, component_class: s.component_class, component_name: s.component_name, tag: s.tag_name, source_id: s.id,
       x: loc ? loc[0] : null, y: loc ? loc[1] : null, rotation_deg: pos.rotation_deg ?? null, mirrored: pos.mirrored ?? null,
       width: ext.width ?? null, height: ext.height ?? null,
       min_x: ext.min?.x ?? null, min_y: ext.min?.y ?? null, max_x: ext.max?.x ?? null, max_y: ext.max?.y ?? null, persistent_id: (s.persistent_id || {}).identifier || null, drawing: dname,
+      ...(tee ? { tee_kinds: "branch", tee_source: "component" } : {}),
       ...flatProps(s.attributes, "attr_"),
     });
   }
-  for (const s of data.symbols) if (s.parent_id in sym) edges.push({ id: `${nid(s.id)}>PART_OF`, type: "PART_OF", from: nid(s.id), to: nid(s.parent_id) });
+  for (const s of data.symbols) if (has(sym, s.parent_id)) edges.push({ id: `${nid(s.id)}>PART_OF`, type: "PART_OF", from: nid(s.id), to: nid(s.parent_id) });
 
   const teeAt = new Map();
   const tee = (xy, kind) => {
     const key = `${Math.round(xy[0] / tol)},${Math.round(xy[1] / tol)}`;
     if (teeAt.has(key)) { const n = nodes.get(teeAt.get(key)); if (!n.tee_kinds.split(";").includes(kind)) n.tee_kinds += ";" + kind; return teeAt.get(key); }
     const id = nid(`TEE_${fmtNum(xy[0])}_${fmtNum(xy[1])}`);
-    teeAt.set(key, id); addNode(id, "Tee", { kind: "Tee", tee_kinds: kind, x: xy[0], y: xy[1], drawing: dname });
+    teeAt.set(key, id); addNode(id, "Tee", { kind: "Tee", tee_kinds: kind, tee_source: kind === "bend" ? "geometry" : "connection", x: xy[0], y: xy[1], drawing: dname });
     return id;
   };
   const symXY = (ref, idx) => {
-    const s = sym[ref]; if (!s) return null;
+    const s = has(sym, ref) ? sym[ref] : null; if (!s) return null;
     if (s.connection_points && idx != null) { const n = s.connection_points.nodes.find(n => n.index === idx); if (n && XY(n.location)) return XY(n.location); }
     return XY((s.position || {}).location) || XY((s.extent || {}).center);
   };
@@ -338,37 +344,131 @@ function buildGraph(data, tol = null) {
     }
     return out;
   };
+  const polyDist = (poly, xy) => poly.length === 1 ? hyp(poly[0], xy) : Math.min(...poly.slice(1).map((b, i) => distPointSeg(xy, poly[i], b)));
+  const closestOnPoly = (poly, xy) => {
+    let best = null;
+    for (let i = 0; i + 1 < poly.length; i++) {
+      const a = poly[i], b = poly[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+      const t = L2 === 0 ? 0 : Math.max(0, Math.min(1, ((xy[0] - a[0]) * dx + (xy[1] - a[1]) * dy) / L2));
+      const q = [a[0] + t * dx, a[1] + t * dy], dd = hyp(xy, q);
+      if (!best || dd < best[0]) best = [dd, q];
+    }
+    return best ? best[1] : poly[0];
+  };
 
-  const segs = {}, junctions = [];
-  for (const [segId, el] of Object.entries(data._segEl)) {
-    const lines = Array.from(el.getElementsByTagName("*")).filter(c => tagOf(c) === "CenterLine" && ancestor(c, "PipingNetworkSegment") === el)
-      .map(cl => kids(cl, "Coordinate").map(c => XY(xyz(c))).filter(Boolean));
-    const comps = Array.from(el.getElementsByTagName("*")).map(c => attr(c, "ID"))
-      .filter(id => id && sym[id] && sym[id].parent_id === segId);
-    const conn = connOf[segId] || {};
-    const sH = symXY(conn.from_id, conn.from_node), eH = symXY(conn.to_id, conn.to_node);
-    let poly = chain(lines, sH);
-    if (poly.length && !sH && eH && hyp(poly[0], eH) < hyp(poly[poly.length - 1], eH)) poly = poly.reverse();
-    const resolve = (ref, idx, near, side) => {
-      if (ref in sym) return ["node", nid(ref), symXY(ref, idx) || near];
-      if (!near) return null;
-      if (ref && (ref in data._segEl || ref in data._sysSegs)) { const t = tee(near, "branch"); junctions.push([ref, t, near, segId]); return ["node", t, near]; }
-      const e = nid(`END_${segId}_${side}`);
-      addNode(e, "PipeEnd", { kind: "PipeEnd", x: near[0], y: near[1], unresolved_ref: ref ?? null, drawing: dname });
-      return ["node", e, near];
-    };
-    const start = resolve(conn.from_id, conn.from_node, poly[0] || null, "start");
-    const end = resolve(conn.to_id, conn.to_node, poly[poly.length - 1] || null, "end");
-    const inserts = comps.map(c => [nid(c), symXY(c, null)]).filter(x => x[1]);
-    segs[segId] = { poly, start, end, inserts };
+  // CenterLine 모으기: 세그먼트 안 + parent id로 세그먼트를 가리키는 바깥 것
+  const pid2seg = {}, pid2sym = {};
+  for (const [sid, i] of Object.entries(segInfo)) { const k = (i.persistent_id || {}).identifier; if (k) pid2seg[k] = sid; }
+  for (const s of data.symbols) { const k = (s.persistent_id || {}).identifier; if (k) pid2sym[k] = s.id; }
+  const parentRef = cl => {
+    for (const name of ["ParentID", "Parent", "ParentRef", "OwnerID", "Owner"]) { const v = attr(cl, name); if (v) return v; }
+    for (const [k, v] of Object.entries(parseAttrs(cl))) if (/^(parent|owner)[ _-]?(id|ref)?$/i.test(k) && v != null && v !== "") return String(v && typeof v === "object" ? v.value : v);
+    return null;
+  };
+  const segLines = {}; for (const sid of Object.keys(data._segEl)) segLines[sid] = [];
+  const sysLines = {}; let unassignedLines = 0, outsideLines = 0;
+  for (const cl of data._all) {
+    if (tagOf(cl) !== "CenterLine") continue;
+    const pts = kids(cl, "Coordinate").map(c => XY(xyz(c))).filter(Boolean); if (!pts.length) continue;
+    const owner = ancestor(cl, "PipingNetworkSegment");
+    if (owner && has(segLines, attr(owner, "ID"))) { segLines[attr(owner, "ID")].push(pts); continue; }
+    outsideLines++;
+    const ref = parentRef(cl);
+    if (has(segLines, ref)) segLines[ref].push(pts);
+    else if (has(pid2seg, ref)) segLines[pid2seg[ref]].push(pts);
+    else {
+      const sysEl = ancestor(cl, "PipingNetworkSystem");
+      const sref = has(data._sysSegs, ref) ? ref : (sysEl ? attr(sysEl, "ID") : null);
+      if (has(data._sysSegs, sref)) (sysLines[sref] = sysLines[sref] || []).push(pts); else unassignedLines++;
+    }
+  }
+  const segComps = (segId, el) => Array.from(el.getElementsByTagName("*")).filter(c => has(sym, attr(c, "ID")) && ancestor(c, "PipingNetworkSegment") === el && sym[attr(c, "ID")].parent_id === segId).map(c => attr(c, "ID"));
+  for (const [sref, lines] of Object.entries(sysLines)) {
+    const cands = data._sysSegs[sref] || [];
+    for (const pts of lines) {
+      const score = sid => {
+        const conn = connOf[sid] || {};
+        const anchors = [...segComps(sid, data._segEl[sid]).map(c => symXY(c, null)), symXY(conn.from_id, conn.from_node), symXY(conn.to_id, conn.to_node), ...segLines[sid].flat()].filter(Boolean);
+        let m = Infinity; for (const a of anchors) for (const q of [pts[0], pts[pts.length - 1]]) m = Math.min(m, hyp(a, q)); return m;
+      };
+      if (cands.length) segLines[cands.reduce((a, b) => score(b) < score(a) ? b : a)].push(pts);
+    }
   }
 
-  const polyDist = (poly, xy) => poly.length === 1 ? hyp(poly[0], xy) : Math.min(...poly.slice(1).map((b, i) => distPointSeg(xy, poly[i], b)));
+  const attrHint = (info, side) => {
+    const re = new RegExp(`^connected[ _-]?pdms[ _-]?type[ _-]?${side}$`, "i");
+    for (const [k, v] of Object.entries(info.attributes || {})) if (re.test(k) && v) return String(v && typeof v === "object" ? v.value : v).trim().toUpperCase();
+    return null;
+  };
+  const segs = {}, junctions = [];
+  for (const [segId, el] of Object.entries(data._segEl)) {
+    const comps = segComps(segId, el), conn = connOf[segId] || {};
+    const sH = symXY(has(pid2sym, conn.from_id) ? pid2sym[conn.from_id] : conn.from_id, conn.from_node);
+    const eH = symXY(has(pid2sym, conn.to_id) ? pid2sym[conn.to_id] : conn.to_id, conn.to_node);
+    let poly = chain(segLines[segId] || [], sH);
+    if (poly.length && !sH && eH && hyp(poly[0], eH) < hyp(poly[poly.length - 1], eH)) poly = poly.reverse();
+    segs[segId] = { poly, comps, conn, inferred: [], hintFrom: attrHint(segInfo[segId] || {}, "from"), hintTo: attrHint(segInfo[segId] || {}, "to") };
+  }
+
+  // 양끝 연결: Connection -> (없으면) 좌표로 근처 심볼/파이프
+  const snap = tol * 30;
+  const symDist = (s, xy) => {
+    const ds = [];
+    if (s.connection_points) for (const n of s.connection_points.nodes) { const q = XY(n.location); if (q) ds.push(hyp(xy, q)); }
+    const loc = XY((s.position || {}).location); if (loc) ds.push(hyp(xy, loc));
+    const ext = s.extent || {}, mn = XY(ext.min), mx = XY(ext.max);
+    if (mn && mx) ds.push(Math.hypot(Math.max(mn[0] - xy[0], 0, xy[0] - mx[0]), Math.max(mn[1] - xy[1], 0, xy[1] - mx[1])));
+    return ds.length ? Math.min(...ds) : Infinity;
+  };
+  const hintOk = (s, hint) => !hint ? true : hint === "TEE" ? isTeeSym(s) : hint.startsWith("NOZZ") ? s.type === "Nozzle" : hint.startsWith("VALV") ? /valve/i.test(s.component_class || "") : true;
+  const snapSym = (xy, hint, exclude) => {
+    let best = null;
+    for (const s of data.symbols) {
+      if (exclude.has(s.id)) continue;
+      const d = symDist(s, xy); if (d > snap) continue;
+      const ext = s.extent || {}, key = [hintOk(s, hint) ? 0 : 1, d, (ext.width || 0) * (ext.height || 0)];
+      if (!best || key[0] < best[0][0] || (key[0] === best[0][0] && (key[1] < best[0][1] || (key[1] === best[0][1] && key[2] < best[0][2])))) best = [key, s.id];
+    }
+    return best ? best[1] : null;
+  };
+  const resolve = (segId, ref, idx, near, side, hint) => {
+    const sg = segs[segId];
+    if (ref && !has(sym, ref) && has(pid2sym, ref)) ref = pid2sym[ref];
+    if (has(sym, ref)) return ["node", nid(ref), symXY(ref, idx) || near];
+    if (!near) return null;
+    if (has(data._segEl, ref) || has(data._sysSegs, ref) || has(pid2seg, ref)) {
+      const hit = snapSym(near, "TEE", new Set(sg.comps));
+      if (hit && isTeeSym(sym[hit])) return ["node", nid(hit), symXY(hit, null) || near];
+      const t = tee(near, "branch"); junctions.push([has(pid2seg, ref) ? pid2seg[ref] : ref, t, near, segId]); return ["node", t, near];
+    }
+    const hit = snapSym(near, hint, new Set(sg.comps));
+    if (hit) { sg.inferred.push(side); return ["node", nid(hit), symXY(hit, null) || near]; }
+    let best = null;
+    for (const [sid, other] of Object.entries(segs)) {
+      if (sid === segId || other.poly.length < 2) continue;
+      const d = polyDist(other.poly, near); if (d <= snap && (!best || d < best[0])) best = [d, sid];
+    }
+    if (best) {
+      const q = closestOnPoly(segs[best[1]].poly, near), t = tee(q, "branch");
+      junctions.push([best[1], t, q, segId]); sg.inferred.push(side); return ["node", t, q];
+    }
+    const e = nid(`END_${segId}_${side}`);
+    addNode(e, "PipeEnd", { kind: "PipeEnd", x: near[0], y: near[1], unresolved_ref: ref ?? null, hint: hint ?? null, drawing: dname });
+    return ["node", e, near];
+  };
+  for (const [segId, sg] of Object.entries(segs)) {
+    const c = sg.conn, poly = sg.poly;
+    sg.start = resolve(segId, c.from_id, c.from_node, poly[0] || null, "start", sg.hintFrom);
+    sg.end = resolve(segId, c.to_id, c.to_node, poly[poly.length - 1] || null, "end", sg.hintTo);
+    sg.inserts = sg.comps.map(x => [nid(x), symXY(x, null)]).filter(x => x[1]);
+  }
+
   for (const [ref, t, xy, src] of junctions) {
-    let cands = ref in data._segEl ? [ref] : (data._sysSegs[ref] || []);
+    let cands = has(data._segEl, ref) ? [ref] : (data._sysSegs[ref] || []);
     cands = cands.filter(c => c !== src && segs[c] && segs[c].poly.length);
     if (!cands.length) continue;
     const tgt = segs[cands.reduce((a, b) => polyDist(segs[b].poly, xy) < polyDist(segs[a].poly, xy) ? b : a)];
+    if ([tgt.start, tgt.end].some(e => e && e[1] === t) || tgt.inserts.some(i => i[0] === t)) continue;
     let merged = false;
     for (const side of ["start", "end"]) {
       const ent = tgt[side];
@@ -417,7 +517,7 @@ function buildGraph(data, tol = null) {
     }
     if (conn.flow_direction === "to->from") clean.reverse();
     const base = { segment_id: info.id || segId, system_id: info.system_id ?? null, line_tag: info.tag_name ?? null,
-      virtual: !!info.virtual, flow: conn.flow_direction ?? null, drawing: dname, ...flatProps(info.attributes, "attr_") };
+      virtual: !!info.virtual, flow: conn.flow_direction ?? null, drawing: dname, connection_inferred: sg.inferred.join(";") || null, ...flatProps(info.attributes, "attr_") };
     let cur = null, geom = [], k = 0;
     for (const e of clean) {
       if (e[2]) geom.push(e[2]);
@@ -436,6 +536,9 @@ function buildGraph(data, tol = null) {
     branch_tees: nl.filter(n => n.label === "Tee" && n.tee_kinds.includes("branch")).length,
     pipe_ends: nl.filter(n => n.label === "PipeEnd").length,
     centerline_points: Object.values(segs).reduce((a, s) => a + s.poly.length, 0),
+    centerlines_outside_segment: outsideLines, centerlines_unassigned: unassignedLines,
+    component_tees: nl.filter(n => n.tee_source === "component").length,
+    inferred_connection_ends: Object.values(segs).reduce((a, s) => a + s.inferred.length, 0),
     segments_without_centerline: Object.values(segs).filter(s => !s.poly.length).length, tol }, nodes: nl, edges };
 }
 
@@ -939,7 +1042,9 @@ function loadFile(file) {
       $("s-ends").textContent = G.summary.pipe_ends;
       const pi = data.plant_information || {};
       $("file-name").textContent = `${file.name} · ${G.drawing}${pi.OriginatingSystem ? " · " + pi.OriginatingSystem : ""}${pi.SchemaVersion ? " " + pi.SchemaVersion : ""}`
-        + ` · 중심선 점 ${G.summary.centerline_points}개, 중심선 없는 세그먼트 ${G.summary.segments_without_centerline}/${data.pipes.length}`;
+        + ` · 중심선 점 ${G.summary.centerline_points}개, 중심선 없는 세그먼트 ${G.summary.segments_without_centerline}/${data.pipes.length}`
+        + `, 세그먼트 밖 CenterLine ${G.summary.centerlines_outside_segment}개(미배정 ${G.summary.centerlines_unassigned})`
+        + `, Tee 부품 ${G.summary.component_tees}개, 좌표로 추정한 연결 ${G.summary.inferred_connection_ends}곳`;
       drop.classList.add("hidden"); $("err").textContent = "";
       showDetail(); resize(); fit();
     } catch (err) {
