@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PlantModel>
+  <PlantInformation SchemaVersion="3.3.3" OriginatingSystem="AVEVA PID" Date="2026-11-10" Units="mm"/>
+  <Drawing Name="P-001" Type="PID">
+    <Presentation Layer="BORDER" LineType="Solid" LineWeight="0.25" Color="White" R="1" G="1" B="1"/>
+    <Extent><Min X="0" Y="0" Z="0"/><Max X="841" Y="594" Z="0"/></Extent>
+    <Line><Presentation Layer="TEXT" LineType="Solid" LineWeight="0.25" Color="White"/>
+      <Extent><Min X="0" Y="0" Z="0"/><Max X="10" Y="0" Z="0"/></Extent>
+      <Coordinate X="0" Y="0" Z="0"/><Coordinate X="10" Y="0" Z="0"/></Line>
+    <Text String="NOTE 1" Height="2.5"><Position><Location X="20" Y="30" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position></Text>
+  </Drawing>
+
+  <Equipment ID="EQ-1" ComponentClass="CentrifugalPump" ComponentName="PUMP_CENT" TagName="P-101">
+    <Presentation Layer="EQUIPMENT" LineType="Solid" LineWeight="0.35" Color="White"/>
+    <Extent><Min X="90" Y="190" Z="0"/><Max X="110" Y="210" Z="0"/></Extent>
+    <Position><Location X="100" Y="200" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+    <Scale X="1" Y="1" Z="1"/>
+    <PersistentID Identifier="4d77-EQ1" Context="P0001000"/>
+    <GenericAttributes Set="EquipmentData" Number="2">
+      <GenericAttribute Name="EquipmentSymbol" Format="string" Value="PUMP_CENT"/>
+      <GenericAttribute Name="DesignFlow" Format="double" Value="12.5" Units="m3/h"/>
+    </GenericAttributes>
+    <Nozzle ID="NZ-1" ComponentClass="Nozzle" TagName="N1">
+      <Position><Location X="110" Y="200" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+      <ConnectionPoints NumPoints="2" FlowIn="0" FlowOut="1">
+        <Node><Position><Location X="110" Y="200" Z="0"/></Position></Node>
+        <Node><Position><Location X="112" Y="200" Z="0"/></Position></Node>
+      </ConnectionPoints>
+    </Nozzle>
+  </Equipment>
+
+  <Equipment ID="EQ-2" ComponentClass="Tank" ComponentName="TANK_V" TagName="T-201">
+    <Extent><Min X="300" Y="180" Z="0"/><Max X="340" Y="240" Z="0"/></Extent>
+    <Position><Location X="320" Y="210" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="0" Y="1" Z="0"/></Position>
+    <Nozzle ID="NZ-2" ComponentClass="Nozzle" TagName="N1">
+      <Position><Location X="300" Y="200" Z="0"/><Axis X="0" Y="0" Z="1"/><Reference X="1" Y="0" Z="0"/></Position>
+      <ConnectionPoints NumPoints="2" FlowIn="1" FlowOut="0">
+        <Node><Position><Location X="300" Y="200" Z="0"/></Position></Node>
+        <Node><Position><Location X="298" Y="200" Z="0"/></Position></Node>
+      </ConnectionPoints>
+    </Nozzle>
+  </Equipment>
+
+  <PipingNetworkSystem ID="PNS-1" TagName="4&quot;-P-1001-A1">
+    <GenericAttributes Set="LineData" Number="3">
+      <GenericAttribute Name="LineNumber" Format="string" Value="P-1001"/>
+      <GenericAttribute Name="NominalDiameter" Format="string" Value="4&quot;"/>
+      <GenericAttribute Name="PipingSpec" Format="string" Value="A1"/>
+    </GenericAttributes>
+    <PipingNetworkSegment ID="SEG-1">
+      <PersistentID Identifier="6448-PipeSeg" Context="P0001000"/>
+      <PipingComponent ID="V-1" ComponentClass="GateValve" ComponentName="VALVE_GATE" TagName="HV-101">
+        <Presentation Layer="AS_PIPE" LineType="Solid" LineWeight="0.35" Color="White"/>
+        <Extent><Min X="195" Y="195" Z="0"/><Max X="205" Y="205" Z="0"/></Extent>
+        <Position><Location X="200" Y="200" Z="0"/><Axis X="0" Y="0" Z="-1"/><Reference X="0" Y="1" Z="0"/></Position>
+        <ConnectionPoints NumPoints="3" FlowIn="1" FlowOut="2">
+          <Node><Position><Location X="200" Y="200" Z="0"/></Position></Node>
+          <Node><Position><Location X="195" Y="200" Z="0"/></Position></Node>
+          <Node><Position><Location X="205" Y="200" Z="0"/></Position></Node>
+        </ConnectionPoints>
+      </PipingComponent>
+      <CenterLine NumPoints="2"><Coordinate X="112" Y="200" Z="0"/><Coordinate X="195" Y="200" Z="0"/></CenterLine>
+      <CenterLine NumPoints="2"><Coordinate X="205" Y="200" Z="0"/><Coordinate X="298" Y="200" Z="0"/></CenterLine>
+      <Connection FromID="NZ-1" FromNode="1" ToID="NZ-2" ToNode="1"/>
+    </PipingNetworkSegment>
+    <PipingNetworkSegment ID="SEG-2">
+      <PersistentID Identifier="6449-VirtualPipeSeg" Context="P0001000"/>
+      <Connection FromID="V-1" FromNode="2" ToID="NZ-2" ToNode="1"/>
+    </PipingNetworkSegment>
+  </PipingNetworkSystem>
+</PlantModel>

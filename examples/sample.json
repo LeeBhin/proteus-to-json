@@ -1,0 +1,520 @@
+{
+  "source_file": "sample.xml",
+  "plant_information": {
+    "SchemaVersion": "3.3.3",
+    "OriginatingSystem": "AVEVA PID",
+    "Date": "2026-11-10",
+    "Units": "mm"
+  },
+  "drawing": {
+    "name": "P-001",
+    "type": "PID",
+    "title": null,
+    "extent": {
+      "min": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "max": {
+        "x": 841,
+        "y": 594,
+        "z": 0
+      },
+      "width": 841,
+      "height": 594,
+      "center": {
+        "x": 420.5,
+        "y": 297.0
+      }
+    },
+    "attributes": {}
+  },
+  "summary": {
+    "symbols": 5,
+    "symbols_by_type": {
+      "Equipment": 2,
+      "Nozzle": 2,
+      "PipingComponent": 1
+    },
+    "pipes": 2,
+    "connections": 2,
+    "virtual_connections": 1,
+    "texts": 1
+  },
+  "symbols": [
+    {
+      "id": "EQ-1",
+      "type": "Equipment",
+      "component_class": "CentrifugalPump",
+      "component_name": "PUMP_CENT",
+      "tag_name": "P-101",
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 100,
+          "y": 200,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 90,
+          "y": 190,
+          "z": 0
+        },
+        "max": {
+          "x": 110,
+          "y": 210,
+          "z": 0
+        },
+        "width": 20,
+        "height": 20,
+        "center": {
+          "x": 100.0,
+          "y": 200.0
+        }
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "presentation": {
+        "Layer": "EQUIPMENT",
+        "LineType": "Solid",
+        "LineWeight": "0.35",
+        "Color": "White"
+      },
+      "persistent_id": {
+        "identifier": "4d77-EQ1",
+        "context": "P0001000"
+      },
+      "attributes": {
+        "EquipmentSymbol": "PUMP_CENT",
+        "DesignFlow": {
+          "value": 12.5,
+          "units": "m3/h"
+        }
+      },
+      "connection_points": null,
+      "virtual": false
+    },
+    {
+      "id": "NZ-1",
+      "type": "Nozzle",
+      "component_class": "Nozzle",
+      "component_name": null,
+      "tag_name": "N1",
+      "parent_id": "EQ-1",
+      "position": {
+        "location": {
+          "x": 110,
+          "y": 200,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": null,
+      "scale": null,
+      "presentation": null,
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": {
+        "num_points": 2,
+        "flow_in": 0,
+        "flow_out": 1,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 110,
+              "y": 200,
+              "z": 0
+            },
+            "flow": "in"
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 112,
+              "y": 200,
+              "z": 0
+            },
+            "flow": "out"
+          }
+        ]
+      },
+      "virtual": false
+    },
+    {
+      "id": "EQ-2",
+      "type": "Equipment",
+      "component_class": "Tank",
+      "component_name": "TANK_V",
+      "tag_name": "T-201",
+      "parent_id": null,
+      "position": {
+        "location": {
+          "x": 320,
+          "y": 210,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "rotation_deg": 90.0,
+        "mirrored": false
+      },
+      "extent": {
+        "min": {
+          "x": 300,
+          "y": 180,
+          "z": 0
+        },
+        "max": {
+          "x": 340,
+          "y": 240,
+          "z": 0
+        },
+        "width": 40,
+        "height": 60,
+        "center": {
+          "x": 320.0,
+          "y": 210.0
+        }
+      },
+      "scale": null,
+      "presentation": null,
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": null,
+      "virtual": false
+    },
+    {
+      "id": "NZ-2",
+      "type": "Nozzle",
+      "component_class": "Nozzle",
+      "component_name": null,
+      "tag_name": "N1",
+      "parent_id": "EQ-2",
+      "position": {
+        "location": {
+          "x": 300,
+          "y": 200,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "reference": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation_deg": 0.0,
+        "mirrored": false
+      },
+      "extent": null,
+      "scale": null,
+      "presentation": null,
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": {
+        "num_points": 2,
+        "flow_in": 1,
+        "flow_out": 0,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 300,
+              "y": 200,
+              "z": 0
+            },
+            "flow": "out"
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 298,
+              "y": 200,
+              "z": 0
+            },
+            "flow": "in"
+          }
+        ]
+      },
+      "virtual": false
+    },
+    {
+      "id": "V-1",
+      "type": "PipingComponent",
+      "component_class": "GateValve",
+      "component_name": "VALVE_GATE",
+      "tag_name": "HV-101",
+      "parent_id": "SEG-1",
+      "position": {
+        "location": {
+          "x": 200,
+          "y": 200,
+          "z": 0
+        },
+        "axis": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "reference": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "rotation_deg": 90.0,
+        "mirrored": true
+      },
+      "extent": {
+        "min": {
+          "x": 195,
+          "y": 195,
+          "z": 0
+        },
+        "max": {
+          "x": 205,
+          "y": 205,
+          "z": 0
+        },
+        "width": 10,
+        "height": 10,
+        "center": {
+          "x": 200.0,
+          "y": 200.0
+        }
+      },
+      "scale": null,
+      "presentation": {
+        "Layer": "AS_PIPE",
+        "LineType": "Solid",
+        "LineWeight": "0.35",
+        "Color": "White"
+      },
+      "persistent_id": null,
+      "attributes": {},
+      "connection_points": {
+        "num_points": 3,
+        "flow_in": 1,
+        "flow_out": 2,
+        "nodes": [
+          {
+            "index": 0,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 200,
+              "y": 200,
+              "z": 0
+            },
+            "flow": null
+          },
+          {
+            "index": 1,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 195,
+              "y": 200,
+              "z": 0
+            },
+            "flow": "in"
+          },
+          {
+            "index": 2,
+            "id": null,
+            "type": null,
+            "location": {
+              "x": 205,
+              "y": 200,
+              "z": 0
+            },
+            "flow": "out"
+          }
+        ]
+      },
+      "virtual": false
+    }
+  ],
+  "pipes": [
+    {
+      "id": "SEG-1",
+      "system_id": "PNS-1",
+      "component_class": null,
+      "tag_name": "4\"-P-1001-A1",
+      "persistent_id": {
+        "identifier": "6448-PipeSeg",
+        "context": "P0001000"
+      },
+      "attributes": {
+        "LineNumber": "P-1001",
+        "NominalDiameter": "4\"",
+        "PipingSpec": "A1"
+      },
+      "segment_attributes": {},
+      "system_attributes": {
+        "LineNumber": "P-1001",
+        "NominalDiameter": "4\"",
+        "PipingSpec": "A1"
+      },
+      "centerlines": [
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 112,
+              "y": 200,
+              "z": 0
+            },
+            {
+              "x": 195,
+              "y": 200,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "presentation": null,
+          "points": [
+            {
+              "x": 205,
+              "y": 200,
+              "z": 0
+            },
+            {
+              "x": 298,
+              "y": 200,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "components": [
+        "V-1"
+      ],
+      "extent": null,
+      "virtual": false
+    },
+    {
+      "id": "SEG-2",
+      "system_id": "PNS-1",
+      "component_class": null,
+      "tag_name": "4\"-P-1001-A1",
+      "persistent_id": {
+        "identifier": "6449-VirtualPipeSeg",
+        "context": "P0001000"
+      },
+      "attributes": {
+        "LineNumber": "P-1001",
+        "NominalDiameter": "4\"",
+        "PipingSpec": "A1"
+      },
+      "segment_attributes": {},
+      "system_attributes": {
+        "LineNumber": "P-1001",
+        "NominalDiameter": "4\"",
+        "PipingSpec": "A1"
+      },
+      "centerlines": [],
+      "components": [],
+      "extent": null,
+      "virtual": true
+    }
+  ],
+  "connections": [
+    {
+      "segment_id": "SEG-1",
+      "from_id": "NZ-1",
+      "from_node": 1,
+      "to_id": "NZ-2",
+      "to_node": 1,
+      "segment_line": "P-1001",
+      "from_type": "Nozzle",
+      "from_tag": "N1",
+      "to_type": "Nozzle",
+      "to_tag": "N1",
+      "from_node_flow": "out",
+      "to_node_flow": "in",
+      "flow_direction": "from->to",
+      "virtual": false,
+      "unresolved": []
+    },
+    {
+      "segment_id": "SEG-2",
+      "from_id": "V-1",
+      "from_node": 2,
+      "to_id": "NZ-2",
+      "to_node": 1,
+      "segment_line": "P-1001",
+      "from_type": "GateValve",
+      "from_tag": "HV-101",
+      "to_type": "Nozzle",
+      "to_tag": "N1",
+      "from_node_flow": "out",
+      "to_node_flow": "in",
+      "flow_direction": "from->to",
+      "virtual": true,
+      "unresolved": []
+    }
+  ],
+  "texts": [
+    {
+      "string": "NOTE 1",
+      "owner_id": null,
+      "location": {
+        "x": 20,
+        "y": 30,
+        "z": 0
+      },
+      "height": 2.5,
+      "presentation": null
+    }
+  ]
+}
